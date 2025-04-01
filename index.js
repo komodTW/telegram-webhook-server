@@ -10,22 +10,22 @@ app.get("/", (req, res) => {
 // 接收 ProxyPin 傳來的預約單資料
 app.post("/pp", async (req, res) => {
   try {
-    const userId = req.body.userId || "unknown";
     const jobs = req.body.jobs || [];
 
     console.log(`📥 收到來自 ProxyPin 的預約單資料，共 ${jobs.length} 筆`);
+
     jobs.forEach((job, index) => {
       console.log(`📌 第 ${index + 1} 筆預約單`);
-      console.log(`🆔 使用者 ID: ${userId}`);
-      console.log(`🆔 預約單ID: ${job.jobId}`);
-      console.log(`📅 搭車時間: ${job.bookingTime}`);
-      console.log(`⏰ 建立時間: ${job.jobTime}`);
-      console.log(`📅 可接單時間: ${job.canTakeTime}`);
+      console.log(`🆔 使用者 ID: ${job.userId || "未知"}`);
+      console.log(`🔖 預約單ID: ${job.jobId}`);
+      console.log(`🗓️ 搭車時間: ${job.bookingTime}`);
+      console.log(`⏱️ 建立時間: ${job.jobTime}`);
+      console.log(`📲 可接單時間: ${job.canTakeTime}`);
       console.log(`💰 車資: $${job.fare}`);
       console.log(`🚕 上車: ${job.on}`);
       console.log(`🛬 下車: ${job.off}`);
       console.log(`📝 備註: ${job.note}`);
-      console.log(`🧳 特殊需求: ${job.extra}`);
+      console.log(`📦 特殊需求: ${job.extra}`);
       console.log(`⏳ 倒數秒數: ${job.countdown} 秒`);
       console.log("──────────────────────────────");
     });
