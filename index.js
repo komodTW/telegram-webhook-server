@@ -1,40 +1,39 @@
 const express = require("express");
-const axios = require("axios");
 const app = express();
 app.use(express.json());
 
-const BOT_TOKEN = process.env.BOT_TOKEN;
-const CHAT_ID = process.env.CHAT_ID;
-
-app.post("/notify", async (req, res) => {
-  // 接收來自 Frida 的金額資訊
-  const fare = req.body.fare || 0;  // 金額默認為 0
-  const message = req.body.message || "🚕 有通知訊息但沒有內容";
-
-  console.log("收到金額:", fare);
-
-  // 如果金額大於 400，則發送通知
-  if (fare > 400) {
-    const notificationMessage = `💰 高額預約單：${fare}元`;
-
-    try {
-      // 發送 Telegram 訊息
-      await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-        chat_id: CHAT_ID,
-        text: notificationMessage
-      });
-      res.status(200).send("✅ 訊息已送出");
-    } catch (err) {
-      console.error("❌ 傳送失敗：", err);
-      res.status(500).send("❌ 傳送失敗");
-    }
-  } else {
-    res.status(200).send("🚫 金額未達標準，無需發送通知");
-  }
-});
-
+// 簡單測試用 GET 頁面
 app.get("/", (req, res) => {
   res.send("✅ Webhook Server 正常運作中");
+});
+
+// 接收 ProxyPin 傳來的預約單資料
+app.post("/pp", async (req, res) => {
+  try {
+    const jobs = req.body.jobs || [];
+    console.log("📥 收到來自 ProxyPin 的預約單資料，共", jobs.length, "筆");
+
+    jobs.forEach((job, index) => {
+      console.log(`📌 第 ${index + 1} 筆預約單`);
+      console.log(`🆔 預約單ID: ${job.jobId}`);
+      console.log(`📅 搭車時間: ${job.bookingTime}`);
+      console.log(`⏰ 建立時間: ${job.jobTime}`);
+      console.log(`📅 可接單時間: ${job.canTakeTime}`);
+      console.log(`💰 車資: $${job.fare}`);
+      console.log(`🚕 上車: ${job.on}`);
+      console.log(`🛬 下車: ${job.off}`);
+      console.log(`📝 備註: ${job.note}`);
+      console.log(`💳 付款代碼: ${job.pay}`);
+      console.log(`🧳 特殊需求: ${job.extra}`);
+      console.log(`⏳ 倒數秒數: ${job.countdown} 秒`);
+      console.log("──────────────────────────────");
+    });
+
+    res.status(200).send("✅ 已成功接收 ProxyPin 資料");
+  } catch (e) {
+    console.error("❌ 接收或解析失敗：", e.message);
+    res.status(500).send("❌ Server 錯誤");
+  }
 });
 
 const PORT = process.env.PORT || 3000;
