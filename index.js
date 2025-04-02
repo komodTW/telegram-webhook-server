@@ -61,7 +61,24 @@ async function sendTelegramNotification(job) {
   const note = job.note || "無";
   const extra = job.extra || "無";
 
-  const messageText = (sec) => `
+  const messageText = (sec, expired = false) => {
+    let statusLine = "";
+
+    if (expired) {
+      statusLine = "\n⛔ *時間已截止，無法執行自動接單*";
+    } else {
+      if (sec <= 5) {
+        statusLine = `\n⏳ *⛔‼️ 剩餘時間：${sec} 秒 ‼️⛔*`;
+      } else if (sec <= 10) {
+        statusLine = `\n⏳ *⚠️ 剩餘時間：${sec} 秒 ⚠️*`;
+      } else if (sec <= 20) {
+        statusLine = `\n⏳ *⏱ 剩餘時間：${sec} 秒*`;
+      } else {
+        statusLine = `\n⏳ *剩餘時間：${sec} 秒*`;
+      }
+    }
+
+    return `
 💰 *${fare}*
 🕓 *${bookingTime}*
 ───────────────
@@ -73,9 +90,8 @@ async function sendTelegramNotification(job) {
 ───────────────
 🆔 用戶 ID：${job.userId}
 🔖 預約單ID：${job.jobId}
-📲 可接單時間: ${canTakeTime}
-⏳ 倒數秒數：*${sec}* 秒
-`;
+📲 可接單時間: ${canTakeTime}${statusLine}`;
+  };
 
   const replyMarkup = {
     inline_keyboard: [
@@ -89,7 +105,7 @@ async function sendTelegramNotification(job) {
     chat_id: CHAT_ID,
     text: messageText(countdown),
     parse_mode: "Markdown",
-    reply_markup: replyMarkup,
+    reply_markup: countdown > 0 ? replyMarkup : undefined,
   };
 
   try {
@@ -120,7 +136,7 @@ async function sendTelegramNotification(job) {
 
     if (countdown > 0) {
       setTimeout(() => {
-        const finalText = `⛔ 時間已截止，無法接單\n\n${messageText(0)}`;
+        const finalText = messageText(0, true);
         updateMessageText(CHAT_ID, message_id, finalText, null);
       }, countdown * 1000);
     }
