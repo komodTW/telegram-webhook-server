@@ -6,21 +6,24 @@ app.use(express.json());
 const TELEGRAM_BOT_TOKEN = "7683067311:AAEGmT3gNK2Maoi1JKUXmRyOKbwT3OomIOk";
 const CHAT_ID = "1821018340";
 
-// 格式化金額為千分位表示
+const notifiedJobs = new Set(); // 防重複通知
+
+// ✅ 金額格式（加千分位 + 空格）
 function formatCurrency(amount) {
   return `$ ${amount.toLocaleString("en-US")}`;
 }
 
-// 格式化日期時間
+// ✅ 日期時間格式（只顯示 MM/DD HH:mm）
 function formatDateTime(dateTime) {
   const date = new Date(dateTime);
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const time = date.toTimeString().split(" ")[0].substring(0, 5);
-  return `${month}/${day} ${time}`;
+  const MM = String(date.getMonth() + 1).padStart(2, "0");
+  const DD = String(date.getDate()).padStart(2, "0");
+  const HH = String(date.getHours()).padStart(2, "0");
+  const mm = String(date.getMinutes()).padStart(2, "0");
+  return `${MM}/${DD} ${HH}:${mm}`;
 }
 
-// 發送通知到 Telegram
+// ✅ 發送 Telegram 訊息
 async function sendTelegramNotification(job) {
   const fare = formatCurrency(job.fare);
   const bookingTime = formatDateTime(job.bookingTime);
@@ -30,8 +33,8 @@ async function sendTelegramNotification(job) {
   const extra = job.extra || "無";
 
   const message = `
-💰 **${fare}**
-🕓 **${bookingTime}**
+💰 *${fare}*
+🕓 *${bookingTime}*
 ──────────────────
 🚕 ${job.on}
 🛬 ${job.off}
@@ -42,7 +45,7 @@ async function sendTelegramNotification(job) {
 🆔 用戶 ID：${job.userId}
 🔖 預約單ID：${job.jobId}
 📲 可接單時間: ${canTakeTime}
-⏳ 倒數秒數：**${countdown}** 秒
+⏳ 倒數秒數：*${countdown}* 秒
 `;
 
   const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
@@ -53,37 +56,59 @@ async function sendTelegramNotification(job) {
   };
 
   try {
-    const response = await fetch(url, {
+    const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    const data = await response.json();
+    const data = await res.json();
     if (!data.ok) {
       console.error("❌ 無法發送 Telegram 訊息：", data.description);
     } else {
       console.log("✅ 成功發送 Telegram 訊息");
     }
-  } catch (error) {
-    console.error("❌ 發送 Telegram 訊息時發生錯誤：", error.message);
+  } catch (err) {
+    console.error("❌ 發送 Telegram 訊息時發生錯誤：", err.message);
   }
 }
 
+// ✅ 主處理邏輯
 app.post("/pp", async (req, res) => {
   try {
     const jobs = req.body.jobs || [];
+    console.log(`📥 收到來自 ProxyPin 的預約單，共 ${jobs.length} 筆`);
 
-    console.log(`📥 收到來自 ProxyPin 的預約單資料，共 ${jobs.length} 筆`);
     for (const job of jobs) {
+      const jobKey = `${job.jobId}_${job.bookingTime}_${job.fare}_${job.on}_${job.off}_${job.note}_${job.extra}`;
+      if (notifiedJobs.has(jobKey)) {
+        console.log(`🔁 略過重複通知：${job.jobId}`);
+        continue;
+      }
+
+      console.log(`📌 預約單資訊`);
+      console.log(`🆔 使用者 ID: ${job.userId}`);
+      console.log(`🔖 預約單ID: ${job.jobId}`);
+      console.log(`🗓️ 搭車時間: ${job.bookingTime}`);
+      console.log(`⏱️ 建立時間: ${job.jobTime}`);
+      console.log(`📲 可接單時間: ${job.canTakeTime}`);
+      console.log(`💰 車資: $${job.fare}`);
+      console.log(`🚕 上車: ${job.on}`);
+      console.log(`🛬 下車: ${job.off}`);
+      console.log(`📝 備註: ${job.note}`);
+      console.log(`📦 特殊需求: ${job.extra}`);
+      console.log(`⏳ 倒數秒數: ${job.countdown} 秒`);
+      console.log("──────────────────────────────");
+
       await sendTelegramNotification(job);
+      notifiedJobs.add(jobKey);
     }
 
-    res.status(200).send("✅ 已成功接收並通知 Telegram");
+    res.status(200).send("✅ 成功接收並發送通知");
   } catch (e) {
-    console.error("❌ 接收或處理失敗：", e.message);
-    res.status(500).send("❌ 伺服器錯誤");
+    console.error("❌ 錯誤：", e.message);
+    res.status(500).send("❌ Server 錯誤");
   }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("🚀 Webhook 伺服器已啟動，埠號：", PORT));
+app.listen(PORT, () => console.log("🚀 Webhook Server 已啟動，Port:", PORT));
