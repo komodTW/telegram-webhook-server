@@ -23,6 +23,16 @@ function formatDateTime(dateTime) {
   return `${MM}/${DD} ${HH}:${mm}`;
 }
 
+// ✅ 時間格式（僅顯示 HH:mm:ss.SSS）
+function formatTimeOnlyWithMs(dateTime) {
+  const date = new Date(dateTime);
+  const HH = String(date.getHours()).padStart(2, "0");
+  const mm = String(date.getMinutes()).padStart(2, "0");
+  const ss = String(date.getSeconds()).padStart(2, "0");
+  const ms = String(date.getMilliseconds()).padStart(3, "0");
+  return `${HH}:${mm}:${ss}.${ms}`;
+}
+
 // ✅ 更新訊息文字
 async function updateMessageText(chat_id, message_id, newText, replyMarkup) {
   const editUrl = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`;
@@ -56,29 +66,12 @@ async function updateMessageText(chat_id, message_id, newText, replyMarkup) {
 async function sendTelegramNotification(job) {
   const fare = formatCurrency(job.fare);
   const bookingTime = formatDateTime(job.bookingTime);
-  const canTakeTime = new Date(job.canTakeTime).toISOString().replace("T", " ").replace("Z", "");
+  const canTakeTime = formatTimeOnlyWithMs(job.canTakeTime);
   const countdown = Math.floor(job.countdown ?? 0);
   const note = job.note || "無";
   const extra = job.extra || "無";
 
-  const messageText = (sec, expired = false) => {
-    let statusLine = "";
-
-    if (expired) {
-      statusLine = "\n⛔ *時間已截止，無法執行自動接單*";
-    } else {
-      if (sec <= 5) {
-        statusLine = `\n⏳ *⛔‼️ 剩餘時間：${sec} 秒 ‼️⛔*`;
-      } else if (sec <= 10) {
-        statusLine = `\n⏳ *⚠️ 剩餘時間：${sec} 秒 ⚠️*`;
-      } else if (sec <= 20) {
-        statusLine = `\n⏳ *⏱ 剩餘時間：${sec} 秒*`;
-      } else {
-        statusLine = `\n⏳ *剩餘時間：${sec} 秒*`;
-      }
-    }
-
-    return `
+  const staticMessage = `
 💰 *${fare}*
 🕓 *${bookingTime}*
 ───────────────
@@ -90,8 +83,25 @@ async function sendTelegramNotification(job) {
 ───────────────
 🆔 用戶 ID：${job.userId}
 🔖 預約單ID：${job.jobId}
-📲 可接單時間: ${canTakeTime}${statusLine}`;
+📲 可接單時間: ${canTakeTime}
+⏳ 倒數秒數：${countdown} 秒
+───────────────`;
+
+  const countdownLine = (sec, expired = false) => {
+    if (expired) {
+      return "⛔️ *時間已截止，無法執行自動接單*";
+    } else if (sec <= 5) {
+      return `⏳ *⛔‼️ 剩餘時間：${sec} 秒 ‼️⛔*`;
+    } else if (sec <= 10) {
+      return `⏳ *⚠️ 剩餘時間：${sec} 秒 ⚠️*`;
+    } else if (sec <= 20) {
+      return `⏳ *⏱ 剩餘時間：${sec} 秒*`;
+    } else {
+      return `⏳ *剩餘時間：${sec} 秒*`;
+    }
   };
+
+  const fullMessage = (sec, expired = false) => `${staticMessage}\n${countdownLine(sec, expired)}`;
 
   const replyMarkup = {
     inline_keyboard: [
@@ -103,7 +113,7 @@ async function sendTelegramNotification(job) {
   const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
   const payload = {
     chat_id: CHAT_ID,
-    text: messageText(countdown),
+    text: fullMessage(countdown),
     parse_mode: "Markdown",
     reply_markup: countdown > 0 ? replyMarkup : undefined,
   };
@@ -129,14 +139,14 @@ async function sendTelegramNotification(job) {
       if (countdown > sec) {
         const delay = (countdown - sec) * 1000;
         setTimeout(() => {
-          updateMessageText(CHAT_ID, message_id, messageText(sec), replyMarkup);
+          updateMessageText(CHAT_ID, message_id, fullMessage(sec), replyMarkup);
         }, delay);
       }
     });
 
     if (countdown > 0) {
       setTimeout(() => {
-        const finalText = messageText(0, true);
+        const finalText = fullMessage(0, true);
         updateMessageText(CHAT_ID, message_id, finalText, null);
       }, countdown * 1000);
     }
