@@ -1,36 +1,45 @@
 const express = require("express");
-const fetch = require("node-fetch");
+const axios = require("axios");
 const app = express();
 app.use(express.json());
 
-// ✅ Telegram 設定
-const TELEGRAM_BOT_TOKEN = "7683067311:AAEGmT3gNK2Maoi1JKUXmRyOKbwT3OomIOk";
+const TELEGRAM_TOKEN = "7683067311:AAEGmT3gNK2Maoi1JKUXmRyOKbwT3OomIOk";
 const TELEGRAM_CHAT_ID = "1821018340";
 
-// ✅ 根路由
-app.get("/", (req, res) => {
-  res.send("✅ Webhook Server 正常運作中");
-});
+// ✅ 已通知資料的快取（key = jobId，value = 完整內容 JSON 字串）
+const notifiedMap = new Map();
 
-// ✅ 網路時間 API
+// ✅ 伺服器時間 API
 app.get("/time", (req, res) => {
-  const serverTime = Date.now();
-  const formatted = new Date(serverTime + 8 * 60 * 60 * 1000)
-    .toISOString().replace("T", " ").replace("Z", "");
-  res.json({ timeMs: serverTime, formatted });
+  const now = Date.now();
+  const formatted = new Date(now + 8 * 60 * 60 * 1000)
+    .toISOString()
+    .replace("T", " ")
+    .replace("Z", "");
+  res.json({ timeMs: now, formatted });
 });
 
-// ✅ 接收 ProxyPin 資料
+// ✅ ProxyPin 傳入預約單資料
 app.post("/pp", async (req, res) => {
   try {
     const jobs = req.body.jobs || [];
     console.log(`📥 收到 ProxyPin 預約單，共 ${jobs.length} 筆`);
 
-    for (let i = 0; i < jobs.length; i++) {
-      const job = jobs[i];
+    for (const [index, job] of jobs.entries()) {
+      const jobId = job.jobId;
+      const jobJson = JSON.stringify(job);
 
-      console.log(`📌 第 ${i + 1} 筆`);
-      console.log(`🆔 使用者 ID: ${job.userId}`);
+      if (notifiedMap.has(jobId) && notifiedMap.get(jobId) === jobJson) {
+        console.log(`⏭️ 預約單 ${jobId} 無變動，略過通知`);
+        continue; // 資料沒變就跳過
+      }
+
+      // ✅ 更新已通知快取
+      notifiedMap.set(jobId, jobJson);
+
+      // ✅ 日誌列出
+      console.log(`📌 第 ${index + 1} 筆預約單`);
+      console.log(`🆔 使用者 ID: ${job.userId || "未知"}`);
       console.log(`🔖 預約單ID: ${job.jobId}`);
       console.log(`🗓️ 搭車時間: ${job.bookingTime}`);
       console.log(`⏱️ 建立時間: ${job.jobTime}`);
@@ -40,32 +49,29 @@ app.post("/pp", async (req, res) => {
       console.log(`🛬 下車: ${job.off}`);
       console.log(`📝 備註: ${job.note}`);
       console.log(`📦 特殊需求: ${job.extra}`);
-      console.log(`⏳ 倒數: ${job.countdown} 秒`);
+      console.log(`⏳ 倒數秒數: ${job.countdown} 秒`);
       console.log("──────────────────────────────");
 
-      // ✅ 發送 Telegram 通知
-      const msg = `💰 $${job.fare}\n🕐 ${job.bookingTime}\n―――――――――\n🚕 ${job.on}\n🛬 ${job.off}\n―――――――――\n${job.note || ""}`;
-      const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
-      await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: TELEGRAM_CHAT_ID,
-          text: msg,
-          parse_mode: "Markdown"
-        }),
+      // ✅ 發送通知給 Telegram
+      const message = `💰 $${job.fare}\n🕓 ${job.bookingTime}\n——————————————\n🚕 ${job.on}\n🛬 ${job.off}\n——————————————\n${job.note}`;
+      await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+        chat_id: TELEGRAM_CHAT_ID,
+        text: message,
+        parse_mode: "Markdown"
       });
+
+      console.log(`📤 已通知 Telegram: 預約單 ${jobId}`);
     }
 
-    res.status(200).send("✅ 成功接收與通知");
+    res.status(200).send("✅ 已處理所有預約單資料");
   } catch (e) {
-    console.error("❌ 發生錯誤：", e.message);
+    console.error("❌ 錯誤：", e.message);
     res.status(500).send("❌ Server 錯誤");
   }
 });
 
-// ✅ 啟動伺服器
-const PORT = process.env.PORT || 3000;
+// ✅ 伺服器啟動
+const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-  console.log("🚀 Webhook Server 已啟動，Port:", PORT);
+  console.log(`🚀 Webhook Server 已啟動，Port: ${PORT}`);
 });
