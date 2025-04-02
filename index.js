@@ -72,7 +72,7 @@ async function sendTelegramNotification(job) {
   const extra = job.extra || "無";
 
   const staticMessage = `
-💰 *${fare}*
+💰 $ *${job.fare.toLocaleString("en-US")}*
 🕓 *${bookingTime}*
 ───────────────
 🚕 ${job.on}
