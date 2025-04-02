@@ -6,7 +6,7 @@ app.use(express.json());
 const TELEGRAM_BOT_TOKEN = "7683067311:AAEGmT3gNK2Maoi1JKUXmRyOKbwT3OomIOk";
 const CHAT_ID = "1821018340";
 
-const notifiedJobs = new Set(); // 防重複通知
+const notifiedJobs = new Set(); // 防重複通知（排除 countdown）
 
 // ✅ 金額格式（加千分位 + 空格）
 function formatCurrency(amount) {
@@ -35,13 +35,13 @@ async function sendTelegramNotification(job) {
   const message = `
 💰 *${fare}*
 🕓 *${bookingTime}*
-──────────────────
+───────────────
 🚕 ${job.on}
 🛬 ${job.off}
-──────────────────
+───────────────
 📝 備註：${note}
 📦 特殊需求：${extra}
-──────────────────
+───────────────
 🆔 用戶 ID：${job.userId}
 🔖 預約單ID：${job.jobId}
 📲 可接單時間: ${canTakeTime}
@@ -79,12 +79,23 @@ app.post("/pp", async (req, res) => {
     console.log(`📥 收到來自 ProxyPin 的預約單，共 ${jobs.length} 筆`);
 
     for (const job of jobs) {
-      const jobKey = `${job.jobId}_${job.bookingTime}_${job.fare}_${job.on}_${job.off}_${job.note}_${job.extra}`;
+      // 🚫 排除 countdown 的比對條件
+      const jobKey = JSON.stringify({
+        jobId: job.jobId,
+        bookingTime: job.bookingTime,
+        fare: job.fare,
+        on: job.on,
+        off: job.off,
+        note: job.note,
+        extra: job.extra,
+      });
+
       if (notifiedJobs.has(jobKey)) {
         console.log(`🔁 略過重複通知：${job.jobId}`);
         continue;
       }
 
+      // ✅ 詳細 log 顯示
       console.log(`📌 預約單資訊`);
       console.log(`🆔 使用者 ID: ${job.userId}`);
       console.log(`🔖 預約單ID: ${job.jobId}`);
@@ -99,6 +110,7 @@ app.post("/pp", async (req, res) => {
       console.log(`⏳ 倒數秒數: ${job.countdown} 秒`);
       console.log("──────────────────────────────");
 
+      // ✅ 發送通知
       await sendTelegramNotification(job);
       notifiedJobs.add(jobKey);
     }
@@ -110,5 +122,6 @@ app.post("/pp", async (req, res) => {
   }
 });
 
+// ✅ 監聽啟動
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log("🚀 Webhook Server 已啟動，Port:", PORT));
