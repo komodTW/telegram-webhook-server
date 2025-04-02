@@ -1,77 +1,89 @@
 const express = require("express");
-const axios = require("axios");
+const fetch = require("node-fetch");
 const app = express();
 app.use(express.json());
 
-const TELEGRAM_TOKEN = "7683067311:AAEGmT3gNK2Maoi1JKUXmRyOKbwT3OomIOk";
-const TELEGRAM_CHAT_ID = "1821018340";
+const TELEGRAM_BOT_TOKEN = "7683067311:AAEGmT3gNK2Maoi1JKUXmRyOKbwT3OomIOk";
+const CHAT_ID = "1821018340";
 
-// ✅ 已通知資料的快取（key = jobId，value = 完整內容 JSON 字串）
-const notifiedMap = new Map();
+// 格式化金額為千分位表示
+function formatCurrency(amount) {
+  return `$ ${amount.toLocaleString("en-US")}`;
+}
 
-// ✅ 伺服器時間 API
-app.get("/time", (req, res) => {
-  const now = Date.now();
-  const formatted = new Date(now + 8 * 60 * 60 * 1000)
-    .toISOString()
-    .replace("T", " ")
-    .replace("Z", "");
-  res.json({ timeMs: now, formatted });
-});
+// 格式化日期時間
+function formatDateTime(dateTime) {
+  const date = new Date(dateTime);
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const time = date.toTimeString().split(" ")[0].substring(0, 5);
+  return `${month}/${day} ${time}`;
+}
 
-// ✅ ProxyPin 傳入預約單資料
+// 發送通知到 Telegram
+async function sendTelegramNotification(job) {
+  const fare = formatCurrency(job.fare);
+  const bookingTime = formatDateTime(job.bookingTime);
+  const canTakeTime = new Date(job.canTakeTime).toISOString().replace("T", " ").replace("Z", "");
+  const countdown = job.countdown ?? 0;
+  const note = job.note || "無";
+  const extra = job.extra || "無";
+
+  const message = `
+💰 **${fare}**
+🕓 **${bookingTime}**
+──────────────────
+🚕 ${job.on}
+🛬 ${job.off}
+──────────────────
+📝 備註：${note}
+📦 特殊需求：${extra}
+──────────────────
+🆔 用戶 ID：${job.userId}
+🔖 預約單ID：${job.jobId}
+📲 可接單時間: ${canTakeTime}
+⏳ 倒數秒數：**${countdown}** 秒
+`;
+
+  const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
+  const payload = {
+    chat_id: CHAT_ID,
+    text: message,
+    parse_mode: "Markdown",
+  };
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json();
+    if (!data.ok) {
+      console.error("❌ 無法發送 Telegram 訊息：", data.description);
+    } else {
+      console.log("✅ 成功發送 Telegram 訊息");
+    }
+  } catch (error) {
+    console.error("❌ 發送 Telegram 訊息時發生錯誤：", error.message);
+  }
+}
+
 app.post("/pp", async (req, res) => {
   try {
     const jobs = req.body.jobs || [];
-    console.log(`📥 收到 ProxyPin 預約單，共 ${jobs.length} 筆`);
 
-    for (const [index, job] of jobs.entries()) {
-      const jobId = job.jobId;
-      const jobJson = JSON.stringify(job);
-
-      if (notifiedMap.has(jobId) && notifiedMap.get(jobId) === jobJson) {
-        console.log(`⏭️ 預約單 ${jobId} 無變動，略過通知`);
-        continue; // 資料沒變就跳過
-      }
-
-      // ✅ 更新已通知快取
-      notifiedMap.set(jobId, jobJson);
-
-      // ✅ 日誌列出
-      console.log(`📌 第 ${index + 1} 筆預約單`);
-      console.log(`🆔 使用者 ID: ${job.userId || "未知"}`);
-      console.log(`🔖 預約單ID: ${job.jobId}`);
-      console.log(`🗓️ 搭車時間: ${job.bookingTime}`);
-      console.log(`⏱️ 建立時間: ${job.jobTime}`);
-      console.log(`📲 可接單時間: ${job.canTakeTime}`);
-      console.log(`💰 車資: $${job.fare}`);
-      console.log(`🚕 上車: ${job.on}`);
-      console.log(`🛬 下車: ${job.off}`);
-      console.log(`📝 備註: ${job.note}`);
-      console.log(`📦 特殊需求: ${job.extra}`);
-      console.log(`⏳ 倒數秒數: ${job.countdown} 秒`);
-      console.log("──────────────────────────────");
-
-      // ✅ 發送通知給 Telegram
-      const message = `💰 $${job.fare}\n🕓 ${job.bookingTime}\n——————————————\n🚕 ${job.on}\n🛬 ${job.off}\n——————————————\n${job.note}`;
-      await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
-        chat_id: TELEGRAM_CHAT_ID,
-        text: message,
-        parse_mode: "Markdown"
-      });
-
-      console.log(`📤 已通知 Telegram: 預約單 ${jobId}`);
+    console.log(`📥 收到來自 ProxyPin 的預約單資料，共 ${jobs.length} 筆`);
+    for (const job of jobs) {
+      await sendTelegramNotification(job);
     }
 
-    res.status(200).send("✅ 已處理所有預約單資料");
+    res.status(200).send("✅ 已成功接收並通知 Telegram");
   } catch (e) {
-    console.error("❌ 錯誤：", e.message);
-    res.status(500).send("❌ Server 錯誤");
+    console.error("❌ 接收或處理失敗：", e.message);
+    res.status(500).send("❌ 伺服器錯誤");
   }
 });
 
-// ✅ 伺服器啟動
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => {
-  console.log(`🚀 Webhook Server 已啟動，Port: ${PORT}`);
-});
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log("🚀 Webhook 伺服器已啟動，埠號：", PORT));
