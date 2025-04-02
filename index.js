@@ -6,14 +6,14 @@ app.use(express.json());
 const TELEGRAM_BOT_TOKEN = "7683067311:AAEGmT3gNK2Maoi1JKUXmRyOKbwT3OomIOk";
 const CHAT_ID = "1821018340";
 
-const notifiedJobs = new Set(); // 防重複通知（排除 countdown）
+const notifiedJobs = new Set();
 
 // ✅ 金額格式（加千分位 + 空格）
 function formatCurrency(amount) {
   return `$ ${amount.toLocaleString("en-US")}`;
 }
 
-// ✅ 日期時間格式（只顯示 MM/DD HH:mm）
+// ✅ 日期時間格式（MM/DD HH:mm）
 function formatDateTime(dateTime) {
   const date = new Date(dateTime);
   const MM = String(date.getMonth() + 1).padStart(2, "0");
@@ -23,7 +23,7 @@ function formatDateTime(dateTime) {
   return `${MM}/${DD} ${HH}:${mm}`;
 }
 
-// ✅ 時間格式（僅顯示 HH:mm:ss.SSS）
+// ✅ 時間格式（HH:mm:ss.SSS）
 function formatTimeOnlyWithMs(dateTime) {
   const date = new Date(dateTime);
   const HH = String(date.getHours()).padStart(2, "0");
@@ -33,7 +33,7 @@ function formatTimeOnlyWithMs(dateTime) {
   return `${HH}:${mm}:${ss}.${ms}`;
 }
 
-// ✅ 更新訊息文字
+// ✅ 更新訊息
 async function updateMessageText(chat_id, message_id, newText, replyMarkup) {
   const editUrl = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`;
   const payload = {
@@ -51,7 +51,6 @@ async function updateMessageText(chat_id, message_id, newText, replyMarkup) {
       body: JSON.stringify(payload),
     });
     const result = await res.json();
-
     if (!result.ok) {
       console.error("❌ 無法更新倒數訊息：", result.description);
     } else {
@@ -62,12 +61,13 @@ async function updateMessageText(chat_id, message_id, newText, replyMarkup) {
   }
 }
 
-// ✅ 發送 Telegram 訊息
+// ✅ 發送 Telegram 通知
 async function sendTelegramNotification(job) {
   const fare = formatCurrency(job.fare);
   const bookingTime = formatDateTime(job.bookingTime);
   const canTakeTime = formatTimeOnlyWithMs(job.canTakeTime);
   const countdown = Math.floor(job.countdown ?? 0);
+  const adjustedCountdown = Math.max(0, countdown - 3); // ✅ 動態倒數用 -3 秒
   const note = job.note || "無";
   const extra = job.extra || "無";
 
@@ -88,17 +88,11 @@ async function sendTelegramNotification(job) {
 ───────────────`;
 
   const countdownLine = (sec, expired = false) => {
-    if (expired) {
-      return "⛔️ *時間已截止，無法執行自動接單*";
-    } else if (sec <= 5) {
-      return `⏳ *⛔‼️ 剩餘時間：${sec} 秒 ‼️⛔*`;
-    } else if (sec <= 10) {
-      return `⏳ *⚠️ 剩餘時間：${sec} 秒 ⚠️*`;
-    } else if (sec <= 20) {
-      return `⏳ *⏱ 剩餘時間：${sec} 秒*`;
-    } else {
-      return `⏳ *剩餘時間：${sec} 秒*`;
-    }
+    if (expired) return "⛔️ *時間已截止，無法執行自動接單*";
+    if (sec <= 5) return `⏳ *⛔‼️ 剩餘時間：${sec} 秒 ‼️⛔*`;
+    if (sec <= 10) return `⏳ *⚠️ 剩餘時間：${sec} 秒 ⚠️*`;
+    if (sec <= 20) return `⏳ *⏱ 剩餘時間：${sec} 秒*`;
+    return `⏳ *剩餘時間：${sec} 秒*`;
   };
 
   const fullMessage = (sec, expired = false) => `${staticMessage}\n${countdownLine(sec, expired)}`;
@@ -113,9 +107,9 @@ async function sendTelegramNotification(job) {
   const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
   const payload = {
     chat_id: CHAT_ID,
-    text: fullMessage(countdown),
+    text: fullMessage(adjustedCountdown),
     parse_mode: "Markdown",
-    reply_markup: countdown > 0 ? replyMarkup : undefined,
+    reply_markup: adjustedCountdown > 0 ? replyMarkup : undefined,
   };
 
   try {
@@ -136,26 +130,26 @@ async function sendTelegramNotification(job) {
 
     const updateAt = [20, 15, 10, 5];
     updateAt.forEach((sec) => {
-      if (countdown > sec) {
-        const delay = (countdown - sec) * 1000;
+      if (adjustedCountdown > sec) {
+        const delay = (adjustedCountdown - sec) * 1000;
         setTimeout(() => {
           updateMessageText(CHAT_ID, message_id, fullMessage(sec), replyMarkup);
         }, delay);
       }
     });
 
-    if (countdown > 0) {
+    if (adjustedCountdown > 0) {
       setTimeout(() => {
         const finalText = fullMessage(0, true);
         updateMessageText(CHAT_ID, message_id, finalText, null);
-      }, countdown * 1000);
+      }, adjustedCountdown * 1000);
     }
   } catch (err) {
     console.error("❌ 發送 Telegram 訊息時發生錯誤：", err.message);
   }
 }
 
-// ✅ 主處理邏輯
+// ✅ 處理 ProxyPin 資料
 app.post("/pp", async (req, res) => {
   try {
     const jobs = req.body.jobs || [];
@@ -202,6 +196,5 @@ app.post("/pp", async (req, res) => {
   }
 });
 
-// ✅ 監聽啟動（符合 Render 要求）
 const PORT = process.env.PORT;
 app.listen(PORT, () => console.log("🚀 Webhook Server 已啟動，Port:", PORT));
