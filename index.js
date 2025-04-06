@@ -7,9 +7,9 @@ const TELEGRAM_BOT_TOKEN = "7683067311:AAEGmT3gNK2Maoi1JKUXmRyOKbwT3OomIOk";
 const CHAT_ID = "1821018340";
 
 const notifiedJobs = new Set();
-const signals = {}; // key: userId, value: "accept" | "skip" | null
+const acceptedJobs = new Set(); // 💡 記錄已接單的 jobId
+const signals = {}; // { userId: "jobId" | "skip" }
 
-// ✅ 格式化工具
 function formatCurrency(amount) {
   return `$ ${amount.toLocaleString("en-US")}`;
 }
@@ -30,35 +30,22 @@ function formatTimeOnlyWithMs(dateTime) {
   return `${HH}:${mm}:${ss}.${ms}`;
 }
 
-// ✅ 更新 Telegram 訊息
+// ✅ 發送更新訊息
 async function updateMessageText(chat_id, message_id, newText, replyMarkup) {
-  const editUrl = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`;
-  const payload = {
-    chat_id,
-    message_id,
-    text: newText,
-    parse_mode: "Markdown",
-    reply_markup: replyMarkup ?? undefined,
-  };
-
-  try {
-    const res = await fetch(editUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const result = await res.json();
-    if (!result.ok) {
-      console.error("❌ 無法更新倒數訊息：", result.description);
-    } else {
-      console.log(`🔄 倒數更新成功 (${chat_id})`);
-    }
-  } catch (err) {
-    console.error("❌ 更新訊息錯誤：", err.message);
-  }
+  await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id,
+      message_id,
+      text: newText,
+      parse_mode: "Markdown",
+      reply_markup: replyMarkup ?? undefined,
+    }),
+  });
 }
 
-// ✅ 發送 TG 通知
+// ✅ 發送通知
 async function sendTelegramNotification(job) {
   const fare = formatCurrency(job.fare);
   const bookingTime = formatDateTime(job.bookingTime);
@@ -94,11 +81,18 @@ async function sendTelegramNotification(job) {
 
   const fullMessage = (sec, expired = false) => `${staticMessage}\n${countdownLine(sec, expired)}`;
 
-  const replyMarkup = {
-    inline_keyboard: [
-      [{ text: "🚀 我要接單", callback_data: `accept_${job.jobId}` }],
-      [{ text: "❌ 略過", callback_data: `skip_${job.jobId}` }],
-    ],
+  const getReplyMarkup = (jobId) => {
+    if (acceptedJobs.has(jobId)) {
+      return {
+        inline_keyboard: [[{ text: "❌ 略過", callback_data: `skip_${jobId}` }]]
+      };
+    }
+    return {
+      inline_keyboard: [
+        [{ text: "🚀 我要接單", callback_data: `accept_${jobId}` }],
+        [{ text: "❌ 略過", callback_data: `skip_${jobId}` }],
+      ]
+    };
   };
 
   const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
@@ -106,82 +100,76 @@ async function sendTelegramNotification(job) {
     chat_id: CHAT_ID,
     text: fullMessage(adjustedCountdown),
     parse_mode: "Markdown",
-    reply_markup: adjustedCountdown > 0 ? replyMarkup : undefined,
+    reply_markup: getReplyMarkup(job.jobId),
   };
 
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json();
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!data.ok) return console.error("❌ 發送 TG 訊息失敗：", data.description);
 
-    if (!data.ok) {
-      console.error("❌ 無法發送 Telegram 訊息：", data.description);
-      return;
-    }
+  const msgId = data.result.message_id;
+  const updateAt = [20, 15, 10, 5];
 
-    console.log("✅ 成功發送 Telegram 訊息");
-    const message_id = data.result.message_id;
-
-    const updateAt = [20, 15, 10, 5];
-    updateAt.forEach((sec) => {
-      if (adjustedCountdown > sec) {
-        const delay = (adjustedCountdown - sec) * 1000;
-        setTimeout(() => {
-          updateMessageText(CHAT_ID, message_id, fullMessage(sec), replyMarkup);
-        }, delay);
-      }
-    });
-
-    if (adjustedCountdown > 0) {
+  updateAt.forEach((sec) => {
+    if (adjustedCountdown > sec) {
+      const delay = (adjustedCountdown - sec) * 1000;
       setTimeout(() => {
-        const finalText = fullMessage(0, true);
-        updateMessageText(CHAT_ID, message_id, finalText, null);
-      }, adjustedCountdown * 1000);
+        updateMessageText(
+          CHAT_ID,
+          msgId,
+          fullMessage(sec),
+          getReplyMarkup(job.jobId)
+        );
+      }, delay);
     }
-  } catch (err) {
-    console.error("❌ 發送 Telegram 訊息時發生錯誤：", err.message);
+  });
+
+  if (adjustedCountdown > 0) {
+    setTimeout(() => {
+      updateMessageText(CHAT_ID, msgId, fullMessage(0, true));
+    }, adjustedCountdown * 1000);
   }
 }
 
-// ✅ 接收 ProxyPin 資料
+// ✅ 接收 ProxyPin
 app.post("/pp", async (req, res) => {
   try {
     const jobs = req.body.jobs || [];
-    console.log(`📥 收到來自 ProxyPin 的預約單，共 ${jobs.length} 筆`);
-
     for (const job of jobs) {
-      const jobKey = JSON.stringify({
-        jobId: job.jobId,
-        bookingTime: job.bookingTime,
-        fare: job.fare,
-        on: job.on,
-        off: job.off,
-        note: job.note,
-        extra: job.extra,
-      });
-
-      if (notifiedJobs.has(jobKey)) {
-        console.log(`🔁 略過重複通知：${job.jobId}`);
-        continue;
-      }
-
+      const key = JSON.stringify(job);
+      if (notifiedJobs.has(key)) continue;
       await sendTelegramNotification(job);
-      notifiedJobs.add(jobKey);
+      notifiedJobs.add(key);
     }
-
-    res.status(200).send("✅ 成功接收並發送通知");
+    res.send("✅ 成功發送通知");
   } catch (e) {
-    console.error("❌ 錯誤：", e.message);
-    res.status(500).send("❌ Server 錯誤");
+    res.status(500).send("❌ 錯誤：" + e.message);
   }
 });
 
-// ✅ 提供目前伺服器時間
+// ✅ 伺服器即時時間
 app.get("/now", (req, res) => {
   res.json({ now: Date.now() });
+});
+
+// ✅ 使用者輪詢訊號
+app.get("/signal", (req, res) => {
+  const userId = req.query.userId;
+  const val = signals[userId];
+  if (!userId || !val) return res.json({ signal: "none" });
+  if (val === "skip") return res.json({ signal: "skip" });
+  return res.json({ signal: "accept", jobId: val });
+});
+
+// ✅ 清除訊號（AJ主動呼叫）
+app.get("/signal/clear", (req, res) => {
+  const userId = req.query.userId;
+  delete signals[userId];
+  res.send("✅ 已清除訊號");
 });
 
 // ✅ 接收 Telegram 按鈕點擊
@@ -190,8 +178,7 @@ app.post("/telegram-callback", async (req, res) => {
   const callback = data.callback_query;
   if (!callback) return res.sendStatus(400);
 
-  const userResponse = callback.data;
-  const match = userResponse.match(/(accept|skip)_(.+)/);
+  const match = callback.data.match(/(accept|skip)_(.+)/);
   if (!match) return res.sendStatus(400);
 
   const action = match[1];
@@ -201,18 +188,17 @@ app.post("/telegram-callback", async (req, res) => {
   const userId = userIdMatch ? userIdMatch[1].trim() : "unknown";
 
   signals[userId] = action === "accept" ? jobId : "skip";
+  if (action === "accept") acceptedJobs.add(jobId);
 
-  // ✅ 回覆點擊訊息
   await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       callback_query_id: callback.id,
-      text: action === "accept" ? "✅ 已送出接單訊號" : "❌ 已略過接單",
+      text: action === "accept" ? "✅ 接單已送出" : "❌ 已略過",
     }),
   });
 
-  // ✅ 如果是接單，就修改按鈕為只剩略過
   if (action === "accept") {
     await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageReplyMarkup`, {
       method: "POST",
@@ -230,23 +216,6 @@ app.post("/telegram-callback", async (req, res) => {
   res.sendStatus(200);
 });
 
-// ✅ 提供 AJ 輪詢訊號
-app.get("/signal", (req, res) => {
-  const userId = req.query.userId;
-  const signal = signals[userId];
-
-  if (!userId || !signal) return res.json({ signal: "none" });
-
-  res.json({ signal, jobId: signal !== "skip" ? signal : null });
-});
-
-// ✅ 手動清除訊號（方法 A）
-app.get("/signal/clear", (req, res) => {
-  const userId = req.query.userId;
-  delete signals[userId];
-  res.send("✅ 已清除訊號");
-});
-
 // ✅ 啟動伺服器
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("🚀 Webhook Server 已啟動，Port:", PORT));
+app.listen(PORT, () => console.log("🚀 Webhook Server 啟動成功，Port:", PORT));
