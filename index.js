@@ -217,7 +217,9 @@ app.post("/telegram-callback", async (req, res) => {
   const userId = userIdMatch ? userIdMatch[1].trim() : "unknown";
 
   signals[userId] = action === "accept" ? jobId : "skip";
-  if (action === "accept") acceptedJobs.add(jobId);
+
+  if (action === "accept") {
+    acceptedJobs.add(jobId);
     console.log(`📩 [TG] 使用者 ${userId} 點擊「我要接單」，jobId=${jobId}`);
   } else {
     console.log(`📩 [TG] 使用者 ${userId} 點擊「略過」，jobId=${jobId}`);
