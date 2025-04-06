@@ -8,7 +8,7 @@ const CHAT_ID = "1821018340";
 
 const notifiedJobs = new Set();
 const acceptedJobs = new Set();
-const signals = {};
+const signals = {}; // { userId: { jobId, createdAt } }
 
 function formatCurrency(amount) {
   return `$ ${amount.toLocaleString("en-US")}`;
@@ -153,12 +153,11 @@ app.post("/pp", async (req, res) => {
         continue;
       }
 
-      // ✅ 顯示詳細 job log
+      // log 預約單詳細資料
       console.log("📌 預約單資訊");
       console.log(`🆔 使用者 ID: ${job.userId}`);
       console.log(`🔖 預約單ID: ${job.jobId}`);
       console.log(`🗓️ 搭車時間: ${job.bookingTime}`);
-      console.log(`⏱️ 建立時間: ${job.jobTime}`);
       console.log(`📲 可接單時間: ${job.canTakeTime}`);
       console.log(`💰 車資: $${job.fare}`);
       console.log(`🚕 上車: ${job.on}`);
@@ -179,32 +178,39 @@ app.post("/pp", async (req, res) => {
   }
 });
 
-// ✅ now 時間查詢
+// ✅ 取得伺服器時間
 app.get("/now", (req, res) => {
   res.json({ now: Date.now() });
 });
 
-// ✅ 訊號輪詢
+// ✅ AJ 訊號查詢
 app.get("/signal", (req, res) => {
   const userId = req.query.userId;
-  const val = signals[userId];
-  if (!userId || !val) return res.json({ signal: "none" });
-  if (val === "skip") return res.json({ signal: "skip" });
-  return res.json({ signal: "accept", jobId: val });
+  const entry = signals[userId];
+
+  if (!userId || !entry) return res.json({ signal: "none" });
+  if (entry === "skip") return res.json({ signal: "skip" });
+
+  return res.json({
+    signal: "accept",
+    jobId: entry.jobId,
+    createdAt: entry.createdAt
+  });
 });
 
-// ✅ 清除訊號
+// ✅ AJ 清除訊號
 app.get("/signal/clear", (req, res) => {
   const userId = req.query.userId;
-  console.log(`🧹 [AJ] 清除訊號：userId=${userId}, 原訊號=${signals[userId]}`);
-  delete signals[userId];
+  if (signals[userId]) {
+    console.log(`🧹 [AJ] 清除訊號：userId=${userId}, 原訊號=${signals[userId].jobId}`);
+    delete signals[userId];
+  }
   res.send("✅ 已清除訊號");
 });
 
-// ✅ Telegram 回調按鈕
+// ✅ TG 按鈕回調處理
 app.post("/telegram-callback", async (req, res) => {
-  const data = req.body;
-  const callback = data.callback_query;
+  const callback = req.body.callback_query;
   if (!callback) return res.sendStatus(400);
 
   const match = callback.data.match(/(accept|skip)_(.+)/);
@@ -216,12 +222,20 @@ app.post("/telegram-callback", async (req, res) => {
   const userIdMatch = text.match(/用戶 ID：(.+)/);
   const userId = userIdMatch ? userIdMatch[1].trim() : "unknown";
 
-  signals[userId] = action === "accept" ? jobId : "skip";
-
   if (action === "accept") {
+    signals[userId] = { jobId, createdAt: Date.now() };
     acceptedJobs.add(jobId);
     console.log(`📩 [TG] 使用者 ${userId} 點擊「我要接單」，jobId=${jobId}`);
+
+    // ✅ 自動清除 25 秒後未處理的訊號
+    setTimeout(() => {
+      if (signals[userId]?.jobId === jobId) {
+        delete signals[userId];
+        console.log(`⌛ [伺服器] 訊號自動過期清除：userId=${userId}, jobId=${jobId}`);
+      }
+    }, 25000);
   } else {
+    signals[userId] = "skip";
     console.log(`📩 [TG] 使用者 ${userId} 點擊「略過」，jobId=${jobId}`);
   }
 
