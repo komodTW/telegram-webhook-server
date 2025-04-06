@@ -7,7 +7,7 @@ const TELEGRAM_BOT_TOKEN = "7683067311:AAEGmT3gNK2Maoi1JKUXmRyOKbwT3OomIOk";
 const CHAT_ID = "1821018340";
 
 const notifiedJobs = new Set();
-const signals = {}; // key: userId, value: jobId or "skip"
+const signals = {}; // key: userId, value: "accept" | "skip" | null
 
 // ✅ 格式化工具
 function formatCurrency(amount) {
@@ -51,7 +51,7 @@ async function updateMessageText(chat_id, message_id, newText, replyMarkup) {
     if (!result.ok) {
       console.error("❌ 無法更新倒數訊息：", result.description);
     } else {
-      console.log(`🔄 倒數更新成功 (${chat_id}) - ${newText.match(/\d+ 秒/)}`);
+      console.log(`🔄 倒數更新成功 (${chat_id})`);
     }
   } catch (err) {
     console.error("❌ 更新訊息錯誤：", err.message);
@@ -146,7 +146,7 @@ async function sendTelegramNotification(job) {
   }
 }
 
-// ✅ 接收來自 ProxyPin 的預約單資料
+// ✅ 接收 ProxyPin 資料
 app.post("/pp", async (req, res) => {
   try {
     const jobs = req.body.jobs || [];
@@ -184,27 +184,25 @@ app.get("/now", (req, res) => {
   res.json({ now: Date.now() });
 });
 
-// ✅ 接收 Telegram 按鈕點擊訊號
+// ✅ 接收 Telegram 按鈕點擊
 app.post("/telegram-callback", async (req, res) => {
   const data = req.body;
   const callback = data.callback_query;
   if (!callback) return res.sendStatus(400);
 
   const userResponse = callback.data;
-  const fromUser = callback.from.id;
-
   const match = userResponse.match(/(accept|skip)_(.+)/);
   if (!match) return res.sendStatus(400);
 
   const action = match[1];
   const jobId = match[2];
-
   const text = callback.message.text;
   const userIdMatch = text.match(/用戶 ID：(.+)/);
   const userId = userIdMatch ? userIdMatch[1].trim() : "unknown";
 
   signals[userId] = action === "accept" ? jobId : "skip";
 
+  // ✅ 回覆點擊訊息
   await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -214,17 +212,39 @@ app.post("/telegram-callback", async (req, res) => {
     }),
   });
 
+  // ✅ 如果是接單，就修改按鈕為只剩略過
+  if (action === "accept") {
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageReplyMarkup`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: callback.message.chat.id,
+        message_id: callback.message.message_id,
+        reply_markup: {
+          inline_keyboard: [[{ text: "❌ 略過", callback_data: `skip_${jobId}` }]]
+        }
+      })
+    });
+  }
+
   res.sendStatus(200);
 });
 
 // ✅ 提供 AJ 輪詢訊號
 app.get("/signal", (req, res) => {
   const userId = req.query.userId;
-  const jobId = signals[userId];
+  const signal = signals[userId];
 
-  if (!userId || !jobId) return res.json({ signal: "none" });
+  if (!userId || !signal) return res.json({ signal: "none" });
 
-  res.json({ signal: "accept", jobId });
+  res.json({ signal, jobId: signal !== "skip" ? signal : null });
+});
+
+// ✅ 手動清除訊號（方法 A）
+app.get("/signal/clear", (req, res) => {
+  const userId = req.query.userId;
+  delete signals[userId];
+  res.send("✅ 已清除訊號");
 });
 
 // ✅ 啟動伺服器
