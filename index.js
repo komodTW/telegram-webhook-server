@@ -196,6 +196,7 @@ app.get("/signal", (req, res) => {
 // ✅ 清除訊號
 app.get("/signal/clear", (req, res) => {
   const userId = req.query.userId;
+  console.log(`🧹 [AJ] 清除訊號：userId=${userId}, 原訊號=${signals[userId]}`);
   delete signals[userId];
   res.send("✅ 已清除訊號");
 });
@@ -217,6 +218,10 @@ app.post("/telegram-callback", async (req, res) => {
 
   signals[userId] = action === "accept" ? jobId : "skip";
   if (action === "accept") acceptedJobs.add(jobId);
+    console.log(`📩 [TG] 使用者 ${userId} 點擊「我要接單」，jobId=${jobId}`);
+  } else {
+    console.log(`📩 [TG] 使用者 ${userId} 點擊「略過」，jobId=${jobId}`);
+  }
 
   await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
     method: "POST",
