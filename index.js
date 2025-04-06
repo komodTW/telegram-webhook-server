@@ -7,13 +7,12 @@ const TELEGRAM_BOT_TOKEN = "7683067311:AAEGmT3gNK2Maoi1JKUXmRyOKbwT3OomIOk";
 const CHAT_ID = "1821018340";
 
 const notifiedJobs = new Set();
+const signals = {}; // key: userId, value: jobId or "skip"
 
-// ✅ 金額格式（加千分位 + 空格）
+// ✅ 格式化工具
 function formatCurrency(amount) {
   return `$ ${amount.toLocaleString("en-US")}`;
 }
-
-// ✅ 日期時間格式（MM/DD HH:mm）
 function formatDateTime(dateTime) {
   const date = new Date(dateTime);
   const MM = String(date.getMonth() + 1).padStart(2, "0");
@@ -22,8 +21,6 @@ function formatDateTime(dateTime) {
   const mm = String(date.getMinutes()).padStart(2, "0");
   return `${MM}/${DD} ${HH}:${mm}`;
 }
-
-// ✅ 時間格式（HH:mm:ss.SSS）
 function formatTimeOnlyWithMs(dateTime) {
   const date = new Date(dateTime);
   const HH = String(date.getHours()).padStart(2, "0");
@@ -33,7 +30,7 @@ function formatTimeOnlyWithMs(dateTime) {
   return `${HH}:${mm}:${ss}.${ms}`;
 }
 
-// ✅ 更新訊息
+// ✅ 更新 Telegram 訊息
 async function updateMessageText(chat_id, message_id, newText, replyMarkup) {
   const editUrl = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`;
   const payload = {
@@ -61,13 +58,13 @@ async function updateMessageText(chat_id, message_id, newText, replyMarkup) {
   }
 }
 
-// ✅ 發送 Telegram 通知
+// ✅ 發送 TG 通知
 async function sendTelegramNotification(job) {
   const fare = formatCurrency(job.fare);
   const bookingTime = formatDateTime(job.bookingTime);
   const canTakeTime = formatTimeOnlyWithMs(job.canTakeTime);
   const countdown = Math.floor(job.countdown ?? 0);
-  const adjustedCountdown = Math.max(0, countdown - 3); // ✅ 動態倒數用 -3 秒
+  const adjustedCountdown = Math.max(0, countdown - 3);
   const note = job.note || "無";
   const extra = job.extra || "無";
 
@@ -149,7 +146,7 @@ async function sendTelegramNotification(job) {
   }
 }
 
-// ✅ 處理 ProxyPin 資料
+// ✅ 接收來自 ProxyPin 的預約單資料
 app.post("/pp", async (req, res) => {
   try {
     const jobs = req.body.jobs || [];
@@ -171,20 +168,6 @@ app.post("/pp", async (req, res) => {
         continue;
       }
 
-      console.log(`📌 預約單資訊`);
-      console.log(`🆔 使用者 ID: ${job.userId}`);
-      console.log(`🔖 預約單ID: ${job.jobId}`);
-      console.log(`🗓️ 搭車時間: ${job.bookingTime}`);
-      console.log(`⏱️ 建立時間: ${job.jobTime}`);
-      console.log(`📲 可接單時間: ${job.canTakeTime}`);
-      console.log(`💰 車資: $${job.fare}`);
-      console.log(`🚕 上車: ${job.on}`);
-      console.log(`🛬 下車: ${job.off}`);
-      console.log(`📝 備註: ${job.note}`);
-      console.log(`📦 特殊需求: ${job.extra}`);
-      console.log(`⏳ 倒數秒數: ${job.countdown} 秒`);
-      console.log("──────────────────────────────");
-
       await sendTelegramNotification(job);
       notifiedJobs.add(jobKey);
     }
@@ -196,11 +179,54 @@ app.post("/pp", async (req, res) => {
   }
 });
 
-// ✅ 提供目前伺服器時間（毫秒）
+// ✅ 提供目前伺服器時間
 app.get("/now", (req, res) => {
   res.json({ now: Date.now() });
 });
 
+// ✅ 接收 Telegram 按鈕點擊訊號
+app.post("/telegram-callback", async (req, res) => {
+  const data = req.body;
+  const callback = data.callback_query;
+  if (!callback) return res.sendStatus(400);
 
-const PORT = process.env.PORT;
+  const userResponse = callback.data;
+  const fromUser = callback.from.id;
+
+  const match = userResponse.match(/(accept|skip)_(.+)/);
+  if (!match) return res.sendStatus(400);
+
+  const action = match[1];
+  const jobId = match[2];
+
+  const text = callback.message.text;
+  const userIdMatch = text.match(/用戶 ID：(.+)/);
+  const userId = userIdMatch ? userIdMatch[1].trim() : "unknown";
+
+  signals[userId] = action === "accept" ? jobId : "skip";
+
+  await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      callback_query_id: callback.id,
+      text: action === "accept" ? "✅ 已送出接單訊號" : "❌ 已略過接單",
+    }),
+  });
+
+  res.sendStatus(200);
+});
+
+// ✅ 提供 AJ 輪詢訊號
+app.get("/signal", (req, res) => {
+  const userId = req.query.userId;
+  const jobId = signals[userId];
+
+  if (!userId || !jobId) return res.json({ signal: "none" });
+
+  res.json({ signal: "accept", jobId });
+});
+
+// ✅ 啟動伺服器
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log("🚀 Webhook Server 已啟動，Port:", PORT));
