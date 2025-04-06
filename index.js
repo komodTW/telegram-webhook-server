@@ -7,8 +7,8 @@ const TELEGRAM_BOT_TOKEN = "7683067311:AAEGmT3gNK2Maoi1JKUXmRyOKbwT3OomIOk";
 const CHAT_ID = "1821018340";
 
 const notifiedJobs = new Set();
-const acceptedJobs = new Set(); // 💡 記錄已接單的 jobId
-const signals = {}; // { userId: "jobId" | "skip" }
+const acceptedJobs = new Set();
+const signals = {};
 
 function formatCurrency(amount) {
   return `$ ${amount.toLocaleString("en-US")}`;
@@ -30,7 +30,6 @@ function formatTimeOnlyWithMs(dateTime) {
   return `${HH}:${mm}:${ss}.${ms}`;
 }
 
-// ✅ 發送更新訊息
 async function updateMessageText(chat_id, message_id, newText, replyMarkup) {
   await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`, {
     method: "POST",
@@ -45,7 +44,6 @@ async function updateMessageText(chat_id, message_id, newText, replyMarkup) {
   });
 }
 
-// ✅ 發送通知
 async function sendTelegramNotification(job) {
   const fare = formatCurrency(job.fare);
   const bookingTime = formatDateTime(job.bookingTime);
@@ -95,19 +93,17 @@ async function sendTelegramNotification(job) {
     };
   };
 
-  const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
-  const payload = {
-    chat_id: CHAT_ID,
-    text: fullMessage(adjustedCountdown),
-    parse_mode: "Markdown",
-    reply_markup: getReplyMarkup(job.jobId),
-  };
-
-  const res = await fetch(url, {
+  const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      chat_id: CHAT_ID,
+      text: fullMessage(adjustedCountdown),
+      parse_mode: "Markdown",
+      reply_markup: getReplyMarkup(job.jobId),
+    }),
   });
+
   const data = await res.json();
   if (!data.ok) return console.error("❌ 發送 TG 訊息失敗：", data.description);
 
@@ -135,28 +131,60 @@ async function sendTelegramNotification(job) {
   }
 }
 
-// ✅ 接收 ProxyPin
+// ✅ 接收 ProxyPin 預約單
 app.post("/pp", async (req, res) => {
   try {
     const jobs = req.body.jobs || [];
+    console.log(`📥 收到 ProxyPin 的預約單，共 ${jobs.length} 筆`);
+
     for (const job of jobs) {
-      const key = JSON.stringify(job);
-      if (notifiedJobs.has(key)) continue;
+      const jobKey = JSON.stringify({
+        jobId: job.jobId,
+        bookingTime: job.bookingTime,
+        fare: job.fare,
+        on: job.on,
+        off: job.off,
+        note: job.note,
+        extra: job.extra,
+      });
+
+      if (notifiedJobs.has(jobKey)) {
+        console.log(`🔁 略過重複通知：${job.jobId}`);
+        continue;
+      }
+
+      // ✅ 顯示詳細 job log
+      console.log("📌 預約單資訊");
+      console.log(`🆔 使用者 ID: ${job.userId}`);
+      console.log(`🔖 預約單ID: ${job.jobId}`);
+      console.log(`🗓️ 搭車時間: ${job.bookingTime}`);
+      console.log(`⏱️ 建立時間: ${job.jobTime}`);
+      console.log(`📲 可接單時間: ${job.canTakeTime}`);
+      console.log(`💰 車資: $${job.fare}`);
+      console.log(`🚕 上車: ${job.on}`);
+      console.log(`🛬 下車: ${job.off}`);
+      console.log(`📝 備註: ${job.note}`);
+      console.log(`📦 特殊需求: ${job.extra}`);
+      console.log(`⏳ 倒數秒數: ${job.countdown} 秒`);
+      console.log("──────────────────────────────");
+
       await sendTelegramNotification(job);
-      notifiedJobs.add(key);
+      notifiedJobs.add(jobKey);
     }
+
     res.send("✅ 成功發送通知");
   } catch (e) {
-    res.status(500).send("❌ 錯誤：" + e.message);
+    console.error("❌ 錯誤：", e.message);
+    res.status(500).send("❌ Server 錯誤");
   }
 });
 
-// ✅ 伺服器即時時間
+// ✅ now 時間查詢
 app.get("/now", (req, res) => {
   res.json({ now: Date.now() });
 });
 
-// ✅ 使用者輪詢訊號
+// ✅ 訊號輪詢
 app.get("/signal", (req, res) => {
   const userId = req.query.userId;
   const val = signals[userId];
@@ -165,14 +193,14 @@ app.get("/signal", (req, res) => {
   return res.json({ signal: "accept", jobId: val });
 });
 
-// ✅ 清除訊號（AJ主動呼叫）
+// ✅ 清除訊號
 app.get("/signal/clear", (req, res) => {
   const userId = req.query.userId;
   delete signals[userId];
   res.send("✅ 已清除訊號");
 });
 
-// ✅ 接收 Telegram 按鈕點擊
+// ✅ Telegram 回調按鈕
 app.post("/telegram-callback", async (req, res) => {
   const data = req.body;
   const callback = data.callback_query;
