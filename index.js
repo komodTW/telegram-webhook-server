@@ -196,5 +196,11 @@ app.post("/pp", async (req, res) => {
   }
 });
 
+// ✅ 提供目前伺服器時間（毫秒）
+app.get("/now", (req, res) => {
+  res.json({ now: Date.now() });
+});
+
+
 const PORT = process.env.PORT;
 app.listen(PORT, () => console.log("🚀 Webhook Server 已啟動，Port:", PORT));
