@@ -253,30 +253,38 @@ app.post("/telegram-callback", async (req, res) => {
   const match = callback.data.match(/(accept|skip)_(.+)/);
   if (!match) return res.sendStatus(400);
 
-  const action = match[1];
-  const jobId = match[2];
-  const text = callback.message.text;
-  const userIdMatch = text.match(/用戶 ID：(.+)/);
-  const userId = userIdMatch ? userIdMatch[1].trim() : "unknown";
+const action = match[1];
+const jobId = match[2];
+const text = callback.message.text;
+const userIdMatch = text.match(/用戶 ID：(.+)/);
+const userId = userIdMatch ? userIdMatch[1].trim() : "unknown";
 
+if (action === "accept") {
   const job = jobCache[jobId];
   if (!job) {
-  console.error(`❌ 無法在 jobCache 中找到 jobId=${jobId} 的資料`);
-  return res.status(400).send("❌ 資料遺失，請重新操作");
+    console.error(`❌ 無法在 jobCache 中找到 jobId=${jobId} 的資料`);
+    return res.status(400).send("❌ 資料遺失，請重新操作");
   }
-    acceptedJobs.add(jobId);
-    console.log(`📩 [TG] 使用者 ${userId} 點擊「我要接單」，jobId=${jobId}`);
 
-    setTimeout(() => {
-      if (signals[userId]?.jobId === jobId) {
-        delete signals[userId];
-        console.log(`⌛ [伺服器] 訊號自動過期清除：userId=${userId}, jobId=${jobId}`);
-      }
-    }, 25000);
-  } else {
-    signals[userId] = "skip";
-    console.log(`📩 [TG] 使用者 ${userId} 點擊「略過」，jobId=${jobId}`);
-  }
+  signals[userId] = {
+    ...job,
+    jobId,
+    createdAt: Date.now()
+  };
+  acceptedJobs.add(jobId);
+  console.log(`📩 [TG] 使用者 ${userId} 點擊「我要接單」，jobId=${jobId}`);
+
+  setTimeout(() => {
+    if (signals[userId]?.jobId === jobId) {
+      delete signals[userId];
+      console.log(`⌛ [伺服器] 訊號自動過期清除：userId=${userId}, jobId=${jobId}`);
+    }
+  }, 25000);
+
+} else {
+  signals[userId] = "skip";
+  console.log(`📩 [TG] 使用者 ${userId} 點擊「略過」，jobId=${jobId}`);
+}
 
   await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
     method: "POST",
