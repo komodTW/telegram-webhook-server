@@ -9,6 +9,7 @@ const CHAT_ID = "1821018340";
 const notifiedJobs = new Set();
 const acceptedJobs = new Set();
 const signals = {}; // { userId: { jobId, createdAt } }
+const userSettings = {}; // { userId: { minFare } }
 
 function formatCurrency(amount) {
   return `$ ${amount.toLocaleString("en-US")}`;
@@ -131,7 +132,7 @@ async function sendTelegramNotification(job) {
   }
 }
 
-// ✅ 接收 ProxyPin 預約單
+// ✅ 接收 ProxyPin 資料
 app.post("/pp", async (req, res) => {
   try {
     const jobs = req.body.jobs || [];
@@ -153,7 +154,13 @@ app.post("/pp", async (req, res) => {
         continue;
       }
 
-      // log 預約單詳細資料
+      // 二次金額篩選（根據 userSettings）
+      const minFare = userSettings[job.userId]?.minFare ?? 300;
+      if (job.fare < minFare) {
+        console.log(`⛔️ 金額不符篩選條件（${job.fare} < ${minFare}），略過 jobId=${job.jobId}`);
+        continue;
+      }
+
       console.log("📌 預約單資訊");
       console.log(`🆔 使用者 ID: ${job.userId}`);
       console.log(`🔖 預約單ID: ${job.jobId}`);
@@ -178,12 +185,28 @@ app.post("/pp", async (req, res) => {
   }
 });
 
-// ✅ 取得伺服器時間
+// ✅ 設定使用者金額條件
+app.post("/user-settings", (req, res) => {
+  const { userId, minFare } = req.body;
+  if (!userId) return res.status(400).send("❌ 缺少 userId");
+
+  if (minFare === null || minFare === undefined) {
+    delete userSettings[userId];
+    console.log(`🔁 使用者 ${userId} 恢復預設金額篩選（不額外限制）`);
+  } else {
+    userSettings[userId] = { minFare };
+    console.log(`✅ 使用者 ${userId} 設定金額條件：${minFare}`);
+  }
+
+  res.send("✅ 設定完成");
+});
+
+// ✅ 伺服器時間查詢
 app.get("/now", (req, res) => {
   res.json({ now: Date.now() });
 });
 
-// ✅ AJ 訊號查詢
+// ✅ AJ 輪詢訊號
 app.get("/signal", (req, res) => {
   const userId = req.query.userId;
   const entry = signals[userId];
@@ -208,7 +231,7 @@ app.get("/signal/clear", (req, res) => {
   res.send("✅ 已清除訊號");
 });
 
-// ✅ TG 按鈕回調處理
+// ✅ TG 按鈕事件處理
 app.post("/telegram-callback", async (req, res) => {
   const callback = req.body.callback_query;
   if (!callback) return res.sendStatus(400);
@@ -227,7 +250,6 @@ app.post("/telegram-callback", async (req, res) => {
     acceptedJobs.add(jobId);
     console.log(`📩 [TG] 使用者 ${userId} 點擊「我要接單」，jobId=${jobId}`);
 
-    // ✅ 自動清除 25 秒後未處理的訊號
     setTimeout(() => {
       if (signals[userId]?.jobId === jobId) {
         delete signals[userId];
