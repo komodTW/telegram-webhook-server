@@ -199,7 +199,7 @@ app.post("/user-settings", async (req, res) => {
   }
 
   // ✅ 這裡可以用 await
-  await fetch(`https://api.telegram.org/bot${7683067311:AAEGmT3gNK2Maoi1JKUXmRyOKbwT3OomIOk}/sendMessage`, {
+  await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
