@@ -1,6 +1,7 @@
 const express = require("express");
 const fetch = require("node-fetch");
 const app = express();
+const jobCache = {}; // 🔁 Job 快取資料池
 app.use(express.json());
 
 const TELEGRAM_BOT_TOKEN = "7683067311:AAEGmT3gNK2Maoi1JKUXmRyOKbwT3OomIOk";
@@ -139,6 +140,7 @@ app.post("/pp", async (req, res) => {
     console.log(`📥 收到 ProxyPin 的預約單，共 ${jobs.length} 筆`);
 
     for (const job of jobs) {
+      jobCache[job.jobId] = job; // 💾 快取每張預約單
       const jobKey = JSON.stringify({
         jobId: job.jobId,
         bookingTime: job.bookingTime,
@@ -229,8 +231,7 @@ app.get("/signal", (req, res) => {
 
   return res.json({
     signal: "accept",
-    jobId: entry.jobId,
-    createdAt: entry.createdAt
+    ...entry
   });
 });
 
@@ -258,8 +259,11 @@ app.post("/telegram-callback", async (req, res) => {
   const userIdMatch = text.match(/用戶 ID：(.+)/);
   const userId = userIdMatch ? userIdMatch[1].trim() : "unknown";
 
-  if (action === "accept") {
-    signals[userId] = { jobId, createdAt: Date.now() };
+  const job = jobCache[jobId];
+  if (!job) {
+  console.error(`❌ 無法在 jobCache 中找到 jobId=${jobId} 的資料`);
+  return res.status(400).send("❌ 資料遺失，請重新操作");
+  }
     acceptedJobs.add(jobId);
     console.log(`📩 [TG] 使用者 ${userId} 點擊「我要接單」，jobId=${jobId}`);
 
