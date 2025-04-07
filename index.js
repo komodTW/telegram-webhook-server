@@ -296,6 +296,14 @@ if (action === "accept") {
 } else {
   signals[userId] = "skip";
   console.log(`📩 [TG] 使用者 ${userId} 點擊「略過」，jobId=${jobId}`);
+
+  // ✅ 新增：略過訊號也 25 秒後自動清除
+  setTimeout(() => {
+    if (signals[userId] === "skip") {
+      delete signals[userId];
+      console.log(`⌛ [伺服器] 略過訊號自動過期清除：userId=${userId}`);
+    }
+  }, 25000);
 }
 
   await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
