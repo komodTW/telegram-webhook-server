@@ -140,16 +140,27 @@ app.post("/pp", async (req, res) => {
     console.log(`📥 收到 ProxyPin 的預約單，共 ${jobs.length} 筆`);
 
     for (const job of jobs) {
-      jobCache[job.jobId] = job; // 💾 快取每張預約單
-      const jobKey = JSON.stringify({
-        jobId: job.jobId,
-        bookingTime: job.bookingTime,
-        fare: job.fare,
-        on: job.on,
-        off: job.off,
-        note: job.note,
-        extra: job.extra,
-      });
+  // ✅ 將 canTakeTime 字串轉為 timestamp（毫秒）
+  if (job.canTakeTime && typeof job.canTakeTime === "string") {
+    const parsed = new Date(job.canTakeTime);
+    if (!isNaN(parsed.getTime())) {
+      job.canTakeTime = parsed.getTime(); // e.g. 1712619203207
+    } else {
+      console.warn("⚠️ 無法解析 canTakeTime，收到的值是：", job.canTakeTime);
+      job.canTakeTime = null;
+    }
+  }
+
+  jobCache[job.jobId] = job;
+  const jobKey = JSON.stringify({
+    jobId: job.jobId,
+    bookingTime: job.bookingTime,
+    fare: job.fare,
+    on: job.on,
+    off: job.off,
+    note: job.note,
+    extra: job.extra,
+  });
 
       if (notifiedJobs.has(jobKey)) {
         console.log(`🔁 略過重複通知：${job.jobId}`);
