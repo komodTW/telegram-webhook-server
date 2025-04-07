@@ -198,6 +198,18 @@ app.post("/user-settings", (req, res) => {
     console.log(`✅ 使用者 ${userId} 設定金額條件：${minFare}`);
   }
 
+  await fetch(`https://api.telegram.org/bot$7683067311:AAEGmT3gNK2Maoi1JKUXmRyOKbwT3OomIOk/sendMessage`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    chat_id: CHAT_ID,
+    text: minFare === null || minFare === undefined
+      ? `🔁 使用者 *${userId}* 恢復預設金額篩選（不額外限制）`
+      : `✅ 使用者 *${userId}* 設定金額條件：$ ${minFare}`,
+    parse_mode: "Markdown",
+  }),
+});
+
   res.send("✅ 設定完成");
 });
 
