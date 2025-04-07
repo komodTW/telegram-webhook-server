@@ -269,6 +269,7 @@ if (action === "accept") {
   signals[userId] = {
     ...job,
     jobId,
+    userId, // ✅ 額外補上 userId，避免 job 裡缺失
     createdAt: Date.now()
   };
   acceptedJobs.add(jobId);
