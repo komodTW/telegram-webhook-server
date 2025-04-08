@@ -4,7 +4,7 @@ const app = express();
 const jobCache = {}; // 🔁 Job 快取資料池
 app.use(express.json());
 
-const TELEGRAM_BOT_TOKEN = "7683067311:AAEGmT3gNK2Maoi1JKUXmRyOKbwT3OomIOk";
+const TELEGRAM_BOT_TOKEN = "7683067311:AAGtr0Guhfz4w6Dm_FTmMLK_M7IhvX6YYDI";
 const CHAT_ID = "1821018340";
 
 const notifiedJobs = new Set();
