@@ -200,6 +200,9 @@ app.post("/pp", async (req, res) => {
 
 // ✅ 新增 LINE GO log 接收 API（建議放在所有 app.post() 的中段）
 
+const LINEGO_BOT_TOKEN = process.env.LINEGO_BOT_TOKEN;
+const LINEGO_CHAT_ID = process.env.LINEGO_CHAT_ID;
+
 app.post("/linego-log", async (req, res) => {
   try {
     const raw = req.body.raw;
