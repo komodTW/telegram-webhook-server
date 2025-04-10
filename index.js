@@ -203,33 +203,50 @@ app.post("/pp", async (req, res) => {
 app.post("/linego-log", async (req, res) => {
   try {
     const data = req.body.raw;
+    if (!raw) return res.status(400).send("❌ 缺少 raw 欄位");
     console.log("📨 收到 LINE GO log：", data);
 
-    // 安全解析
-    const fare = data.fare_range?.[0] ?? 0;
-    const start = data.start_address || "未提供";
-    const stops = data.stops?.join("\n") || "無停靠點";
-    const note = data.notes?.trim() || "無";
-    const reserveTime = new Date(data.reserve_time * 1000).toISOString(); // 搭車時間
-    const canTakeTime = new Date(data.acceptable_time * 1000).toISOString(); // 可接單時間
+    // 欄位預設值處理
+    const {
+      start_address = "未知上車地點",
+      address = "未知下車地點",
+      fare_range = [],
+      reserve_time,
+      acceptable_time,
+      notes = "",
+      featureName = "無"
+    } = raw;
 
+    const fare = fare_range[0] || 0;
+
+    const formatTime = (t) => {
+      if (!t || typeof t !== "number") return "❓ 無效時間";
+      const date = new Date(t * 1000);
+      const HH = String(date.getHours()).padStart(2, "0");
+      const mm = String(date.getMinutes()).padStart(2, "0");
+      const ss = String(date.getSeconds()).padStart(2, "0");
+      return `${HH}:${mm}:${ss}`;
+    };
+
+    const reserveTimeFormatted = formatTime(reserve_time);
+    const canTakeTimeFormatted = formatTime(acceptable_time);
+
+    // 🧾 格式化訊息
     const message = `
 💰 *$ ${fare.toLocaleString()}*
-🕓 *${reserveTime}*
+🕒 *${reserveTimeFormatted}*
 
-🚕 ${start}
-🛬 ${stops}
+🚕 *上車地點：* ${start_address}
+🛬 *下車地點：* ${address}
 
-📝 備註：${note}
-📦 特殊需求：無
+📝 *備註：* ${notes || "無"}
+📦 *特殊需求：* ${featureName || "無"}
 
-🆔 LINE GO 測試用戶
-📲 可接單時間: ${canTakeTime}
-⚠️ 倒數顯示功能尚未實作
-
-🕐 時間：${new Date().toLocaleString()}
+📲 *可接單時間：* ${canTakeTimeFormatted}
+🕐 *通知時間：* ${new Date().toLocaleString()}
 `;
 
+    // ✅ 傳送至 Telegram
     await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -237,12 +254,14 @@ app.post("/linego-log", async (req, res) => {
         chat_id: CHAT_ID,
         text: message,
         parse_mode: "Markdown"
-      })
+      }),
     });
 
-    res.send("✅ 已轉發 LINE GO 簡訊格式");
+    console.log("📨 LINE GO 資料已通知 Telegram");
+    res.send("✅ 成功通知 Telegram");
+
   } catch (e) {
-    console.error("❌ 處理 /linego-log 發生錯誤：", e.message);
+    console.error("❌ /linego-log 發生錯誤：", e.message);
     res.status(500).send("❌ 錯誤");
   }
 });
