@@ -200,20 +200,39 @@ app.post("/pp", async (req, res) => {
 
 // ✅ 新增 LINE GO log 接收 API（建議放在所有 app.post() 的中段）
 
+// ✅ LINE GO log 接收與格式化通知
 app.post("/linego-log", async (req, res) => {
   try {
-    const rawBody = req.body.raw;
-    console.log("📨 收到 LINE GO log：", rawBody);
+    const rawData = req.body.raw;
+
+    // 轉為物件（無論原本是字串或 JSON）
+    const data = typeof rawData === "string" ? JSON.parse(rawData) : rawData;
+
+    const start = data.start_address || "未知上車地點";
+    const stops = Array.isArray(data.stops) ? data.stops.join("\n") : "無停靠點";
+    const notes = data.notes || "無";
+    const fare = data.fare_range?.[0] || 0;
+
+    const acceptTime = new Date((data.acceptable_time || 0) * 1000);
+    const acceptTimeStr = `${acceptTime.getHours().toString().padStart(2, "0")}:${acceptTime.getMinutes().toString().padStart(2, "0")}:${acceptTime.getSeconds().toString().padStart(2, "0")}.${acceptTime.getMilliseconds().toString().padStart(3, "0")}`;
+    const acceptISO = acceptTime.toISOString();
 
     const text = `
-   📡 *LINE GO 回應資料*
-    \`\`\`json
-    ${rawBody}
-    \`\`\`
+💰 *$ ${fare.toLocaleString()}*
+🗓 ${acceptTimeStr}
 
-    📏 資料長度：${rawBody.length} 字元  
-    🕐 時間：${new Date().toLocaleString()}
-    `;
+🚕 ${start}
+🛬 ${stops}
+
+📝 備註：${notes}
+📦 特殊需求：無
+
+🆔 LINE GO 測試用戶
+📲 可接單時間: ${acceptISO}
+⏳ 倒數顯示功能尚未實作
+───────────────
+🕐 時間：${new Date().toLocaleString()}
+`;
 
     await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
       method: "POST",
@@ -225,40 +244,12 @@ app.post("/linego-log", async (req, res) => {
       })
     });
 
-    res.send("✅ 已轉發原始 log 至 Telegram");
+    console.log("✅ 已格式化並發送 LINE GO 通知");
+    res.send("✅ 已轉發格式化通知");
   } catch (e) {
     console.error("❌ 處理 /linego-log 發生錯誤：", e.message);
     res.status(500).send("❌ 錯誤");
   }
-});
-
-// ✅ 設定使用者金額條件
-app.post("/user-settings", async (req, res) => {
-  const { userId, minFare } = req.body;
-  if (!userId) return res.status(400).send("❌ 缺少 userId");
-
-  if (minFare === null || minFare === undefined) {
-    delete userSettings[userId];
-    console.log(`🔁 使用者 ${userId} 恢復預設金額篩選（不額外限制）`);
-  } else {
-    userSettings[userId] = { minFare };
-    console.log(`✅ 使用者 ${userId} 設定金額條件：${minFare}`);
-  }
-
-  // ✅ 這裡可以用 await
-  await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      chat_id: CHAT_ID,
-      text: minFare === null || minFare === undefined
-        ? `🔁 使用者 *${userId}* 恢復預設金額篩選（不額外限制）`
-        : `✅ 使用者 *${userId}* 設定金額條件：$ ${minFare}`,
-      parse_mode: "Markdown",
-    }),
-  });
-
-  res.send("✅ 設定完成");
 });
 
 // ✅ 伺服器時間查詢
