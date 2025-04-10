@@ -249,7 +249,7 @@ app.post("/linego-log", async (req, res) => {
 
     // ✅ 格式化訊息
     const message = `
-💵 *$ ${fare.toLocaleString()}*
+🟢 *$ ${fare.toLocaleString()}*
 ⏳ *${reserveTimeFormatted}*
 ───────────────
 ✅ 上車：${start_address}
