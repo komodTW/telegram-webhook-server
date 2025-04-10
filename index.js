@@ -7,7 +7,7 @@ app.use(express.json());
 const TELEGRAM_BOT_TOKEN = process.env.BOT_TOKEN;
 const CHAT_ID = process.env.CHAT_ID;
 
-const notifiedJobs = new Set();
+const notifiedJobs = []; // 🔁 陣列版本，只保留最近 10 筆
 const acceptedJobs = new Set();
 const signals = {}; // { userId: { jobId, createdAt } }
 const userSettings = {}; // { userId: { minFare } }
@@ -162,10 +162,13 @@ app.post("/pp", async (req, res) => {
     extra: job.extra,
   });
 
-      if (notifiedJobs.has(jobKey)) {
+      if (notifiedJobs.includes(jobKey)) {
         console.log(`🔁 略過重複通知：${job.jobId}`);
         continue;
       }
+
+      notifiedJobs.push(jobKey);
+      if (notifiedJobs.length > 10) notifiedJobs.shift(); // 只保留最新 10 筆
 
       // 二次金額篩選（根據 userSettings）
       const minFare = userSettings[job.userId]?.minFare ?? 300;
@@ -188,7 +191,6 @@ app.post("/pp", async (req, res) => {
       console.log("──────────────────────────────");
 
       await sendTelegramNotification(job);
-      notifiedJobs.add(jobKey);
     }
 
     res.send("✅ 成功發送通知");
@@ -203,11 +205,12 @@ app.post("/pp", async (req, res) => {
 const LINEGO_BOT_TOKEN = process.env.LINEGO_BOT_TOKEN;
 const LINEGO_CHAT_ID = process.env.LINEGO_CHAT_ID;
 
+const notifiedLinegoJobs = [];
+
 app.post("/linego-log", async (req, res) => {
   try {
     const raw = req.body.raw;
     if (!raw) return res.status(400).send("❌ 缺少 raw 欄位");
-    console.log("📨 收到 LINE GO log：", raw);
 
     // 欄位預設值處理
     const {
@@ -221,6 +224,25 @@ app.post("/linego-log", async (req, res) => {
     } = raw;
 
     const fare = fare_range[0] || 0;
+
+    // ✅ 比對內容 key，用於防重複通知
+    const jobKey = JSON.stringify({
+      start_address,
+      address,
+      fare,
+      reserve_time,
+      acceptable_time,
+      notes,
+      featureName
+    });
+
+    if (notifiedLinegoJobs.includes(jobKey)) {
+      console.log("🔁 LINE GO 略過重複通知");
+      return res.send("🔁 已通知過相同資料，略過");
+    }
+
+    notifiedLinegoJobs.push(jobKey);
+    if (notifiedLinegoJobs.length > 10) notifiedLinegoJobs.shift();
 
     const formatTimeMMDD = (t) => {
       if (!t || typeof t !== "number") return "❓ 無效時間";
