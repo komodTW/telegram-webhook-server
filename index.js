@@ -274,8 +274,8 @@ app.post("/linego-log", async (req, res) => {
 🟢 *$ ${fare.toLocaleString()}*
 ⏳ *${reserveTimeFormatted}*
 ───────────────
-✅ 上車：${start_address}
-☑️ 下車：${address}
+🚀 上車：${start_address}
+🛸 下車：${address}
 ───────────────
 📝 備註：${notes || "無"}
 🔔 特殊需求：${featureName || "無"}
