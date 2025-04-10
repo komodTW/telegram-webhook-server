@@ -200,37 +200,33 @@ app.post("/pp", async (req, res) => {
 
 // ✅ 新增 LINE GO log 接收 API（建議放在所有 app.post() 的中段）
 
-// ✅ LINE GO log 接收與格式化通知
 app.post("/linego-log", async (req, res) => {
   try {
-    const rawData = req.body.raw;
+    const data = req.body.raw;
+    console.log("📨 收到 LINE GO log：", data);
 
-    // 轉為物件（無論原本是字串或 JSON）
-    const data = typeof rawData === "string" ? JSON.parse(rawData) : rawData;
+    // 安全解析
+    const fare = data.fare_range?.[0] ?? 0;
+    const start = data.start_address || "未提供";
+    const stops = data.stops?.join("\n") || "無停靠點";
+    const note = data.notes?.trim() || "無";
+    const reserveTime = new Date(data.reserve_time * 1000).toISOString(); // 搭車時間
+    const canTakeTime = new Date(data.acceptable_time * 1000).toISOString(); // 可接單時間
 
-    const start = data.start_address || "未知上車地點";
-    const stops = Array.isArray(data.stops) ? data.stops.join("\n") : "無停靠點";
-    const notes = data.notes || "無";
-    const fare = data.fare_range?.[0] || 0;
-
-    const acceptTime = new Date((data.acceptable_time || 0) * 1000);
-    const acceptTimeStr = `${acceptTime.getHours().toString().padStart(2, "0")}:${acceptTime.getMinutes().toString().padStart(2, "0")}:${acceptTime.getSeconds().toString().padStart(2, "0")}.${acceptTime.getMilliseconds().toString().padStart(3, "0")}`;
-    const acceptISO = acceptTime.toISOString();
-
-    const text = `
+    const message = `
 💰 *$ ${fare.toLocaleString()}*
-🗓 ${acceptTimeStr}
+🕓 *${reserveTime}*
 
 🚕 ${start}
 🛬 ${stops}
 
-📝 備註：${notes}
+📝 備註：${note}
 📦 特殊需求：無
 
 🆔 LINE GO 測試用戶
-📲 可接單時間: ${acceptISO}
-⏳ 倒數顯示功能尚未實作
-───────────────
+📲 可接單時間: ${canTakeTime}
+⚠️ 倒數顯示功能尚未實作
+
 🕐 時間：${new Date().toLocaleString()}
 `;
 
@@ -239,13 +235,12 @@ app.post("/linego-log", async (req, res) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         chat_id: CHAT_ID,
-        text,
+        text: message,
         parse_mode: "Markdown"
       })
     });
 
-    console.log("✅ 已格式化並發送 LINE GO 通知");
-    res.send("✅ 已轉發格式化通知");
+    res.send("✅ 已轉發 LINE GO 簡訊格式");
   } catch (e) {
     console.error("❌ 處理 /linego-log 發生錯誤：", e.message);
     res.status(500).send("❌ 錯誤");
