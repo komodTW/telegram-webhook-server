@@ -246,14 +246,14 @@ app.post("/linego-log", async (req, res) => {
 
     // ✅ 格式化訊息
     const message = `
-💰 *$ ${fare.toLocaleString()}*
-🕒 *${reserveTimeFormatted}*
+💵 *$ ${fare.toLocaleString()}*
+⏳ *${reserveTimeFormatted}*
 ───────────────
-🚕 上車：${start_address}
-🛬 下車：${address}
+✅ 上車：${start_address}
+☑️ 下車：${address}
 ───────────────
 📝 備註：${notes || "無"}
-📦 特殊需求：${featureName || "無"}
+🔔 特殊需求：${featureName || "無"}
 ───────────────
 📲 *可接單時間：${canTakeTimeFormatted}*
 `;
