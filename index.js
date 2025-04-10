@@ -202,9 +202,9 @@ app.post("/pp", async (req, res) => {
 
 app.post("/linego-log", async (req, res) => {
   try {
-    const data = req.body.raw;
+    const raw = req.body.raw;
     if (!raw) return res.status(400).send("❌ 缺少 raw 欄位");
-    console.log("📨 收到 LINE GO log：", data);
+    console.log("📨 收到 LINE GO log：", raw);
 
     // 欄位預設值處理
     const {
