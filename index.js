@@ -219,31 +219,43 @@ app.post("/linego-log", async (req, res) => {
 
     const fare = fare_range[0] || 0;
 
-    const formatTime = (t) => {
+    const formatTimeMMDD = (t) => {
       if (!t || typeof t !== "number") return "❓ 無效時間";
       const date = new Date(t * 1000);
+      date.setHours(date.getHours() + 8); // ✅ 台灣時區
+      const MM = String(date.getMonth() + 1).padStart(2, "0");
+      const DD = String(date.getDate()).padStart(2, "0");
+      const HH = String(date.getHours()).padStart(2, "0");
+      const mm = String(date.getMinutes()).padStart(2, "0");
+      return `${MM}/${DD} ${HH}:${mm}`;
+    };
+
+    const formatTimeWithMs = (t) => {
+      if (!t || typeof t !== "number") return "❓ 無效時間";
+      const date = new Date(t * 1000);
+      date.setHours(date.getHours() + 8); // ✅ 台灣時區
       const HH = String(date.getHours()).padStart(2, "0");
       const mm = String(date.getMinutes()).padStart(2, "0");
       const ss = String(date.getSeconds()).padStart(2, "0");
-      return `${HH}:${mm}:${ss}`;
+      const ms = String(date.getMilliseconds()).padStart(3, "0");
+      return `${HH}:${mm}:${ss}.${ms}`;
     };
 
-    const reserveTimeFormatted = formatTime(reserve_time);
-    const canTakeTimeFormatted = formatTime(acceptable_time);
+    const reserveTimeFormatted = formatTimeMMDD(reserve_time);
+    const canTakeTimeFormatted = formatTimeWithMs(acceptable_time);
 
-    // 🧾 格式化訊息
+    // ✅ 格式化訊息
     const message = `
 💰 *$ ${fare.toLocaleString()}*
 🕒 *${reserveTimeFormatted}*
-
-🚕 *上車地點：* ${start_address}
-🛬 *下車地點：* ${address}
-
-📝 *備註：* ${notes || "無"}
-📦 *特殊需求：* ${featureName || "無"}
-
-📲 *可接單時間：* ${canTakeTimeFormatted}
-🕐 *通知時間：* ${new Date().toLocaleString()}
+───────────────
+🚕 上車：${start_address}
+🛬 下車：${address}
+───────────────
+📝 備註：${notes || "無"}
+📦 特殊需求：${featureName || "無"}
+───────────────
+📲 *可接單時間：${canTakeTimeFormatted}*
 `;
 
     // ✅ 傳送至 Telegram
