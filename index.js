@@ -203,14 +203,15 @@ app.post("/pp", async (req, res) => {
 app.post("/linego-log", async (req, res) => {
   try {
     const rawBody = req.body.raw;
+    console.log("📨 收到 LINE GO log：", rawBody);
 
     const text = `
 📡 *LINE GO 回應資料*
 \`\`\`json
-${rawBody.slice(0, 800)}
+${rawBody}
 \`\`\`
-🔗 資料長度：${rawBody.length} 字元
-時間：${new Date().toLocaleString()}
+📏 資料長度：${rawBody.length} 字元
+🕐 時間：${new Date().toLocaleString()}
 `;
 
     await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
