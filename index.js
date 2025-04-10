@@ -198,6 +198,38 @@ app.post("/pp", async (req, res) => {
   }
 });
 
+// ✅ 新增 LINE GO log 接收 API（建議放在所有 app.post() 的中段）
+
+app.post("/linego-log", async (req, res) => {
+  try {
+    const rawBody = req.body.raw;
+
+    const text = `
+📡 *LINE GO 回應資料*
+\`\`\`json
+${rawBody.slice(0, 800)}
+\`\`\`
+🔗 資料長度：${rawBody.length} 字元
+時間：${new Date().toLocaleString()}
+`;
+
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: CHAT_ID,
+        text,
+        parse_mode: "Markdown"
+      })
+    });
+
+    res.send("✅ 已轉發原始 log 至 Telegram");
+  } catch (e) {
+    console.error("❌ 處理 /linego-log 發生錯誤：", e.message);
+    res.status(500).send("❌ 錯誤");
+  }
+});
+
 // ✅ 設定使用者金額條件
 app.post("/user-settings", async (req, res) => {
   const { userId, minFare } = req.body;
