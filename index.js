@@ -259,11 +259,11 @@ app.post("/linego-log", async (req, res) => {
 `;
 
     // ✅ 傳送至 Telegram
-    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    await fetch(`https://api.telegram.org/bot${LINEGO_BOT_TOKEN}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        chat_id: CHAT_ID,
+        chat_id: LINEGO_CHAT_ID,
         text: message,
         parse_mode: "Markdown"
       }),
