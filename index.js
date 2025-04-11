@@ -2,6 +2,7 @@ const express = require("express");
 const fetch = require("node-fetch");
 const app = express();
 const jobCache = {}; // 🔁 Job 快取資料池
+const jobList = {}; // 新增 job 清單快取，每位使用者的預約單列表
 app.use(express.json());
 
 const TELEGRAM_BOT_TOKEN = process.env.BOT_TOKEN;
@@ -152,6 +153,10 @@ app.post("/pp", async (req, res) => {
   }
 
   jobCache[job.jobId] = job;
+  if (!jobList[userId]) jobList[userId] = [];
+  jobList[userId].unshift(job); // 將新單放最前面
+  if (jobList[userId].length > 10) jobList[userId].pop(); // 最多保留 10 筆
+      
   const jobKey = JSON.stringify({
     jobId: job.jobId,
     bookingTime: job.bookingTime,
@@ -349,6 +354,12 @@ app.get("/signal", (req, res) => {
     signal: "accept",
     ...entry
   });
+});
+
+app.get("/pp/list", (req, res) => {
+  const userId = req.query.userId;
+  if (!userId) return res.status(400).send("Missing userId");
+  res.json(jobList[userId] || []);
 });
 
 // ✅ AJ 清除訊號
