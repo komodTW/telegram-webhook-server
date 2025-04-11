@@ -210,7 +210,7 @@ app.post("/pp", async (req, res) => {
      console.log(`🔁 使用者 ${userId} 恢復預設金額篩選（不額外限制）`);
    } else {
      userSettings[userId] = { minFare };
-     console.log(`✅ 使用者 ${userId} 設定金額條件：${minFare}`);
+     console.log(`✅${userId} 金額設定值：${minFare}`);
    }
  
    // ✅ 這裡可以用 await
