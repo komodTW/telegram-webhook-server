@@ -207,7 +207,7 @@ app.post("/pp", async (req, res) => {
  
    if (minFare === null || minFare === undefined) {
      delete userSettings[userId];
-     console.log(`🔁 使用者 ${userId} 恢復預設金額篩選（不額外限制）`);
+     console.log(`🔁${userId} 恢復預設金額`);
    } else {
      userSettings[userId] = { minFare };
      console.log(`✅${userId} 金額設定值：${minFare}`);
@@ -220,8 +220,8 @@ app.post("/pp", async (req, res) => {
      body: JSON.stringify({
        chat_id: CHAT_ID,
        text: minFare === null || minFare === undefined
-         ? `🔁 使用者 *${userId}* 恢復預設金額篩選（不額外限制）`
-         : `✅ 使用者 *${userId}* 設定金額條件：$ ${minFare}`,
+         ? `🔁${userId} 恢復預設金額`
+         : `✅${userId} 金額設定值：$ ${minFare}`,
        parse_mode: "Markdown",
      }),
    });
