@@ -382,6 +382,52 @@ app.get("/signal/clear", (req, res) => {
   res.send("✅ 已清除訊號");
 });
 
+app.get("/signal/set", (req, res) => {
+  const { userId, signal, jobId } = req.query;
+  if (!userId || !signal) return res.status(400).send("❌ 缺少參數");
+
+  if (signal === "accept") {
+    const job = jobCache[jobId];
+    if (!job) {
+      console.error(`❌ 無法在 jobCache 中找到 jobId=${jobId} 的資料`);
+      return res.status(400).send("❌ job 不存在");
+    }
+
+    signals[userId] = {
+      ...job,
+      jobId,
+      userId,
+      createdAt: Date.now()
+    };
+    console.log(`📩 [手機] 接收到接單指令：userId=${userId}, jobId=${jobId}`);
+
+    setTimeout(() => {
+      if (signals[userId]?.jobId === jobId) {
+        delete signals[userId];
+        console.log(`⌛ [伺服器] 手機接單訊號自動過期：userId=${userId}, jobId=${jobId}`);
+      }
+    }, 25000);
+
+    return res.send("✅ 已送出接單訊號");
+  }
+
+  if (signal === "skip") {
+    signals[userId] = "skip";
+    console.log(`📩 [手機] 接收到略過指令：userId=${userId}`);
+
+    setTimeout(() => {
+      if (signals[userId] === "skip") {
+        delete signals[userId];
+        console.log(`⌛ [伺服器] 手機略過訊號自動過期：userId=${userId}`);
+      }
+    }, 25000);
+
+    return res.send("✅ 已送出略過訊號");
+  }
+
+  return res.status(400).send("❌ signal 內容錯誤");
+});
+
 // ✅ TG 按鈕事件處理
 app.post("/telegram-callback", async (req, res) => {
   const callback = req.body.callback_query;
