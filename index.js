@@ -141,6 +141,14 @@ app.post("/pp", async (req, res) => {
     console.log(`📥 收到 ProxyPin 的預約單，共 ${jobs.length} 筆`);
 
     for (const job of jobs) {
+      const userId = job.userId; // ✅ 加上這一行！
+
+      // ⚠️ 防呆檢查：userId 為空就略過
+      if (!userId) {
+        console.log("❌ 錯誤：job.userId 為空，jobId=" + job.jobId);
+        continue;
+      }
+      
   // ✅ 將 canTakeTime 字串轉為 timestamp（毫秒）
   if (job.canTakeTime && typeof job.canTakeTime === "string") {
     const parsed = new Date(job.canTakeTime);
@@ -153,6 +161,8 @@ app.post("/pp", async (req, res) => {
   }
 
   jobCache[job.jobId] = job;
+
+  // ✅ 將 job 存入 jobList[userId]
   if (!jobList[userId]) jobList[userId] = [];
   jobList[userId].unshift(job); // 將新單放最前面
   if (jobList[userId].length > 10) jobList[userId].pop(); // 最多保留 10 筆
