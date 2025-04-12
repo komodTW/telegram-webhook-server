@@ -162,58 +162,59 @@ app.post("/pp", async (req, res) => {
 
   jobCache[job.jobId] = job;
 
-  // ✅ 將 job 存入 jobList[userId]
-  if (!jobList[userId]) jobList[userId] = [];
-  jobList[userId].unshift(job); // 將新單放最前面
-  if (jobList[userId].length > 10) jobList[userId].pop(); // 最多保留 10 筆
+  // ✅ 將 job 存入 jobList[userId]（不重複寫入）
       
   const jobKey = JSON.stringify({
-    jobId: job.jobId,
-    bookingTime: job.bookingTime,
-    fare: job.fare,
-    on: job.on,
-    off: job.off,
-    note: job.note,
-    extra: job.extra,
-  });
-
-      if (notifiedJobs.includes(jobKey)) {
-        console.log(`🔁 略過重複通知：${job.jobId}`);
-        continue;
-      }
-
-      notifiedJobs.push(jobKey);
-      if (notifiedJobs.length > 10) notifiedJobs.shift(); // 只保留最新 10 筆
-
-      // 二次金額篩選（根據 userSettings）
-      const minFare = userSettings[job.userId]?.minFare ?? 1;
-      if (job.fare < minFare) {
-        console.log(`⛔️ 金額不符篩選條件（${job.fare} < ${minFare}），略過 jobId=${job.jobId}`);
-        continue;
-      }
-
-      console.log("📌 預約單資訊");
-      console.log(`🆔 使用者 ID: ${job.userId}`);
-      console.log(`🔖 預約單ID: ${job.jobId}`);
-      console.log(`🗓️ 搭車時間: ${job.bookingTime}`);
-      console.log(`📲 可接單時間: ${job.canTakeTime}`);
-      console.log(`💰 車資: $${job.fare}`);
-      console.log(`🚕 上車: ${job.on}`);
-      console.log(`🛬 下車: ${job.off}`);
-      console.log(`📝 備註: ${job.note}`);
-      console.log(`📦 特殊需求: ${job.extra}`);
-      console.log(`⏳ 倒數秒數: ${job.countdown} 秒`);
-      console.log("──────────────────────────────");
-
-      await sendTelegramNotification(job);
-    }
-
-    res.send("✅ 成功發送通知");
-  } catch (e) {
-    console.error("❌ 錯誤：", e.message);
-    res.status(500).send("❌ Server 錯誤");
-  }
+  jobId: job.jobId,
+  bookingTime: job.bookingTime,
+  fare: job.fare,
+  on: job.on,
+  off: job.off,
+  note: job.note,
+  extra: job.extra,
 });
+
+if (notifiedJobs.includes(jobKey)) {
+  console.log(`🔁 略過重複通知：${job.jobId}`);
+  continue;
+}
+
+// ✅ 推送 Telegram
+notifiedJobs.push(jobKey);
+if (notifiedJobs.length > 10) notifiedJobs.shift();
+
+// ✅ 二次金額篩選
+const minFare = userSettings[job.userId]?.minFare ?? 1;
+if (job.fare < minFare) {
+  console.log(`⛔️ 金額不符篩選條件（${job.fare} < ${minFare}），略過 jobId=${job.jobId}`);
+  continue;
+}
+
+// ✅ 推播資訊
+console.log("📌 預約單資訊");
+console.log(`🆔 使用者 ID: ${job.userId}`);
+console.log(`🔖 預約單ID: ${job.jobId}`);
+console.log(`🗓️ 搭車時間: ${job.bookingTime}`);
+console.log(`📲 可接單時間: ${job.canTakeTime}`);
+console.log(`💰 車資: $${job.fare}`);
+console.log(`🚕 上車: ${job.on}`);
+console.log(`🛬 下車: ${job.off}`);
+console.log(`📝 備註: ${job.note}`);
+console.log(`📦 特殊需求: ${job.extra}`);
+console.log(`⏳ 倒數秒數: ${job.countdown} 秒`);
+console.log("──────────────────────────────");
+
+await sendTelegramNotification(job);
+
+// ✅ jobList 判斷是否寫入（防重複）
+jobCache[job.jobId] = job;
+if (!jobList[userId]) jobList[userId] = [];
+
+const exists = jobList[userId].some(j => j.jobId === job.jobId);
+if (!exists) {
+  jobList[userId].unshift(job);
+  if (jobList[userId].length > 10) jobList[userId].pop();
+}
 
 // ✅ 設定使用者金額條件
  app.post("/user-settings", async (req, res) => {
