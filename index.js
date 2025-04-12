@@ -141,111 +141,108 @@ app.post("/pp", async (req, res) => {
     console.log(`📥 收到 ProxyPin 的預約單，共 ${jobs.length} 筆`);
 
     for (const job of jobs) {
-      const userId = job.userId; // ✅ 加上這一行！
+      const userId = job.userId;
 
-      // ⚠️ 防呆檢查：userId 為空就略過
+      // ⚠️ 防呆檢查
       if (!userId) {
         console.log("❌ 錯誤：job.userId 為空，jobId=" + job.jobId);
         continue;
       }
-      
-  // ✅ 將 canTakeTime 字串轉為 timestamp（毫秒）
-  if (job.canTakeTime && typeof job.canTakeTime === "string") {
-    const parsed = new Date(job.canTakeTime);
-    if (!isNaN(parsed.getTime())) {
-      job.canTakeTime = parsed.getTime(); // e.g. 1712619203207
-    } else {
-      console.warn("⚠️ 無法解析 canTakeTime，收到的值是：", job.canTakeTime);
-      job.canTakeTime = null;
+
+      // ✅ 字串轉毫秒時間
+      if (job.canTakeTime && typeof job.canTakeTime === "string") {
+        const parsed = new Date(job.canTakeTime);
+        job.canTakeTime = isNaN(parsed.getTime()) ? null : parsed.getTime();
+      }
+
+      const jobKey = JSON.stringify({
+        jobId: job.jobId,
+        bookingTime: job.bookingTime,
+        fare: job.fare,
+        on: job.on,
+        off: job.off,
+        note: job.note,
+        extra: job.extra,
+      });
+
+      if (notifiedJobs.includes(jobKey)) {
+        console.log(`🔁 略過重複通知：${job.jobId}`);
+        continue;
+      }
+
+      notifiedJobs.push(jobKey);
+      if (notifiedJobs.length > 10) notifiedJobs.shift();
+
+      // ✅ 金額篩選
+      const minFare = userSettings[userId]?.minFare ?? 1;
+      if (job.fare < minFare) {
+        console.log(`⛔️ 金額不符篩選條件（${job.fare} < ${minFare}），略過 jobId=${job.jobId}`);
+        continue;
+      }
+
+      // ✅ 顯示預約單內容
+      console.log("📌 預約單資訊");
+      console.log(`🆔 使用者 ID: ${userId}`);
+      console.log(`🔖 預約單ID: ${job.jobId}`);
+      console.log(`🗓️ 搭車時間: ${job.bookingTime}`);
+      console.log(`📲 可接單時間: ${job.canTakeTime}`);
+      console.log(`💰 車資: $${job.fare}`);
+      console.log(`🚕 上車: ${job.on}`);
+      console.log(`🛬 下車: ${job.off}`);
+      console.log(`📝 備註: ${job.note}`);
+      console.log(`📦 特殊需求: ${job.extra}`);
+      console.log(`⏳ 倒數秒數: ${job.countdown} 秒`);
+      console.log("──────────────────────────────");
+
+      await sendTelegramNotification(job);
+
+      // ✅ 寫入 jobList 給 job_panel（不重複）
+      jobCache[job.jobId] = job;
+      if (!jobList[userId]) jobList[userId] = [];
+
+      const exists = jobList[userId].some(j => j.jobId === job.jobId);
+      if (!exists) {
+        jobList[userId].unshift(job);
+        if (jobList[userId].length > 10) jobList[userId].pop();
+      }
     }
+
+    res.send("✅ 成功發送通知");
+  } catch (e) {
+    console.error("❌ 錯誤：", e.message);
+    res.status(500).send("❌ Server 錯誤");
   }
-
-  jobCache[job.jobId] = job;
-
-  // ✅ 將 job 存入 jobList[userId]（不重複寫入）
-      
-  const jobKey = JSON.stringify({
-  jobId: job.jobId,
-  bookingTime: job.bookingTime,
-  fare: job.fare,
-  on: job.on,
-  off: job.off,
-  note: job.note,
-  extra: job.extra,
 });
 
-if (notifiedJobs.includes(jobKey)) {
-  console.log(`🔁 略過重複通知：${job.jobId}`);
-  continue;
-}
+// ✅ 設定使用者金額條件（獨立 API）
+app.post("/user-settings", async (req, res) => {
+  const { userId, minFare } = req.body;
+  if (!userId) return res.status(400).send("❌ 缺少 userId");
 
-// ✅ 推送 Telegram
-notifiedJobs.push(jobKey);
-if (notifiedJobs.length > 10) notifiedJobs.shift();
+  if (minFare === null || minFare === undefined) {
+    delete userSettings[userId];
+    console.log(`🔁${userId} 恢復預設金額`);
+  } else {
+    userSettings[userId] = { minFare };
+    console.log(`✅${userId} 金額設定值：${minFare}`);
+  }
 
-// ✅ 二次金額篩選
-const minFare = userSettings[job.userId]?.minFare ?? 1;
-if (job.fare < minFare) {
-  console.log(`⛔️ 金額不符篩選條件（${job.fare} < ${minFare}），略過 jobId=${job.jobId}`);
-  continue;
-}
+  await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: CHAT_ID,
+      text: minFare === null || minFare === undefined
+        ? `🔁${userId} 恢復預設金額`
+        : `✅${userId} 金額設定值：$ ${minFare}`,
+      parse_mode: "Markdown",
+    }),
+  });
 
-// ✅ 推播資訊
-console.log("📌 預約單資訊");
-console.log(`🆔 使用者 ID: ${job.userId}`);
-console.log(`🔖 預約單ID: ${job.jobId}`);
-console.log(`🗓️ 搭車時間: ${job.bookingTime}`);
-console.log(`📲 可接單時間: ${job.canTakeTime}`);
-console.log(`💰 車資: $${job.fare}`);
-console.log(`🚕 上車: ${job.on}`);
-console.log(`🛬 下車: ${job.off}`);
-console.log(`📝 備註: ${job.note}`);
-console.log(`📦 特殊需求: ${job.extra}`);
-console.log(`⏳ 倒數秒數: ${job.countdown} 秒`);
-console.log("──────────────────────────────");
+  res.send("✅ 設定完成");
+});
 
-await sendTelegramNotification(job);
-
-// ✅ 同步寫入 jobList 給 job_panel（不重複）
-jobCache[job.jobId] = job;
-if (!jobList[userId]) jobList[userId] = [];
-
-const exists = jobList[userId].some(j => j.jobId === job.jobId);
-if (!exists) {
-  jobList[userId].unshift(job);
-  if (jobList[userId].length > 10) jobList[userId].pop(); // 最多保留 10 筆
-}
-
-// ✅ 設定使用者金額條件
- app.post("/user-settings", async (req, res) => {
-   const { userId, minFare } = req.body;
-   if (!userId) return res.status(400).send("❌ 缺少 userId");
- 
-   if (minFare === null || minFare === undefined) {
-     delete userSettings[userId];
-     console.log(`🔁${userId} 恢復預設金額`);
-   } else {
-     userSettings[userId] = { minFare };
-     console.log(`✅${userId} 金額設定值：${minFare}`);
-   }
- 
-   // ✅ 這裡可以用 await
-   await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-     method: "POST",
-     headers: { "Content-Type": "application/json" },
-     body: JSON.stringify({
-       chat_id: CHAT_ID,
-       text: minFare === null || minFare === undefined
-         ? `🔁${userId} 恢復預設金額`
-         : `✅${userId} 金額設定值：$ ${minFare}`,
-       parse_mode: "Markdown",
-     }),
-   });
- 
-   res.send("✅ 設定完成");
- });
-
-// ✅ 新增：格式化後的 job 列表，用於 job_panel 顯示（與 Telegram 同步）
+// ✅ job_panel 專用資料來源（已同步篩選邏輯）
 app.get("/pp/view", (req, res) => {
   const userId = req.query.userId;
   const jobs = jobList[userId] || [];
@@ -269,7 +266,6 @@ app.get("/pp/view", (req, res) => {
   };
 
   const now = Date.now();
-
   const formatted = jobs.map(job => ({
     jobId: job.jobId,
     fare: job.fare,
