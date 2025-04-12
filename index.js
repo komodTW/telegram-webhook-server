@@ -274,7 +274,6 @@ app.get("/pp/view", (req, res) => {
     extra: job.extra || "無",
     bookingTime: formatDateTime(job.bookingTime),
     canTakeTime: formatTimeOnlyWithMs(job.canTakeTime),
-    countdown: Math.max(0, Math.floor((job.canTakeTime - now) / 1000)),
     countdown: job.countdown, // ✅ 直接用原始值，不再換算
   }));
 
