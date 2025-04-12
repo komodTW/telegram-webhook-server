@@ -206,14 +206,14 @@ console.log("──────────────────────�
 
 await sendTelegramNotification(job);
 
-// ✅ jobList 判斷是否寫入（防重複）
+// ✅ 同步寫入 jobList 給 job_panel（不重複）
 jobCache[job.jobId] = job;
 if (!jobList[userId]) jobList[userId] = [];
 
 const exists = jobList[userId].some(j => j.jobId === job.jobId);
 if (!exists) {
   jobList[userId].unshift(job);
-  if (jobList[userId].length > 10) jobList[userId].pop();
+  if (jobList[userId].length > 10) jobList[userId].pop(); // 最多保留 10 筆
 }
 
 // ✅ 設定使用者金額條件
