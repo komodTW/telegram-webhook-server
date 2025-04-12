@@ -186,7 +186,7 @@ app.post("/pp", async (req, res) => {
       if (notifiedJobs.length > 10) notifiedJobs.shift(); // 只保留最新 10 筆
 
       // 二次金額篩選（根據 userSettings）
-      const minFare = userSettings[job.userId]?.minFare ?? 300;
+      const minFare = userSettings[job.userId]?.minFare ?? 1;
       if (job.fare < minFare) {
         console.log(`⛔️ 金額不符篩選條件（${job.fare} < ${minFare}），略過 jobId=${job.jobId}`);
         continue;
