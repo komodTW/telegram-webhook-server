@@ -165,13 +165,12 @@ app.post("/pp", async (req, res) => {
         extra: job.extra,
       });
 
-      if (notifiedJobs.includes(jobKey)) {
-        console.log(`🔁 略過重複通知：${job.jobId}`);
+      if (notifiedJobs.includes(job.jobId)) {
+        console.log(`🔁 略過重複通知 jobId=${job.jobId}`);
         continue;
       }
-
-      notifiedJobs.push(jobKey);
-      if (notifiedJobs.length > 10) notifiedJobs.shift();
+      notifiedJobs.push(job.jobId);
+      if (notifiedJobs.length > 30) notifiedJobs.shift(); // 可拉高儲存上限
 
       // ✅ 金額篩選
       const minFare = userSettings[userId]?.minFare ?? 1;
