@@ -244,6 +244,46 @@ app.post("/pp", async (req, res) => {
    res.send("✅ 設定完成");
  });
 
+// ✅ 新增：格式化後的 job 列表，用於 job_panel 顯示（與 Telegram 同步）
+app.get("/pp/view", (req, res) => {
+  const userId = req.query.userId;
+  const jobs = jobList[userId] || [];
+
+  const formatDateTime = (ts) => {
+    const date = new Date(ts);
+    const MM = String(date.getMonth() + 1).padStart(2, "0");
+    const DD = String(date.getDate()).padStart(2, "0");
+    const HH = String(date.getHours()).padStart(2, "0");
+    const mm = String(date.getMinutes()).padStart(2, "0");
+    return `${MM}/${DD} ${HH}:${mm}`;
+  };
+
+  const formatTimeOnlyWithMs = (ts) => {
+    const date = new Date(ts);
+    const HH = String(date.getHours()).padStart(2, "0");
+    const mm = String(date.getMinutes()).padStart(2, "0");
+    const ss = String(date.getSeconds()).padStart(2, "0");
+    const ms = String(date.getMilliseconds()).padStart(3, "0");
+    return `${HH}:${mm}:${ss}.${ms}`;
+  };
+
+  const now = Date.now();
+
+  const formatted = jobs.map(job => ({
+    jobId: job.jobId,
+    fare: job.fare,
+    on: job.on,
+    off: job.off,
+    note: job.note || "無",
+    extra: job.extra || "無",
+    bookingTime: formatDateTime(job.bookingTime),
+    canTakeTime: formatTimeOnlyWithMs(job.canTakeTime),
+    countdown: Math.max(0, Math.floor((job.canTakeTime - now) / 1000)),
+  }));
+
+  res.json(formatted);
+});
+
 // ✅ 新增 LINE GO log 接收 API（建議放在所有 app.post() 的中段）
 
 const LINEGO_BOT_TOKEN = process.env.LINEGO_BOT_TOKEN;
@@ -364,12 +404,6 @@ app.get("/signal", (req, res) => {
     signal: "accept",
     ...entry
   });
-});
-
-app.get("/pp/list", (req, res) => {
-  const userId = req.query.userId;
-  if (!userId) return res.status(400).send("Missing userId");
-  res.json(jobList[userId] || []);
 });
 
 // ✅ AJ 清除訊號
