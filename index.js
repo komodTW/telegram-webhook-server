@@ -298,6 +298,18 @@ app.get("/pp/view", (req, res) => {
   res.json(formatted);
 });
 
+
+// ✅ 清除 /pp/view（jobList）中所有使用者的快取資料
+app.post("/pp/flush", (req, res) => {
+  Object.keys(jobList).forEach(userId => {
+    jobList[userId] = [];
+  });
+
+  console.log("🧹 /pp/flush 被呼叫，所有 jobList 清空");
+  res.send("✅ 已清除所有使用者的預約單快取");
+});
+
+
 // ✅ 新增 LINE GO log 接收 API（建議放在所有 app.post() 的中段）
 
 const LINEGO_BOT_TOKEN = process.env.LINEGO_BOT_TOKEN;
