@@ -215,30 +215,49 @@ app.post("/pp", async (req, res) => {
 
 // ✅ 設定使用者金額條件（獨立 API）
 app.post("/user-settings", async (req, res) => {
-  const { userId, minFare } = req.body;
-  if (!userId) return res.status(400).send("❌ 缺少 userId");
+  const { userId, minFare, maxFare, delay } = req.body;
 
-  if (minFare === null || minFare === undefined) {
-    delete userSettings[userId];
-    console.log(`🔁${userId} 恢復預設金額`);
-  } else {
-    userSettings[userId] = { minFare };
-    console.log(`✅${userId} 金額設定值：${minFare}`);
+  console.log("📥 收到設定請求：", req.body);
+
+  if (!userId) {
+    console.error("❌ [設定] 缺少 userId，無法儲存");
+    return res.status(400).send("❌ 缺少 userId");
   }
 
-  await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      chat_id: CHAT_ID,
-      text: minFare === null || minFare === undefined
-        ? `🔁${userId} 恢復預設金額`
-        : `✅${userId} 金額設定值：$ ${minFare}`,
-      parse_mode: "Markdown",
-    }),
-  });
+  try {
+    if (minFare === null || minFare === undefined) {
+      delete userSettings[userId];
+      console.log(`🔁 [${userId}] 恢復預設金額`);
+    } else {
+      userSettings[userId] = { minFare, maxFare, delay };
+      console.log(`✅ [${userId}] 設定金額：min=${minFare}, max=${maxFare}, 延設=${delay}`);
+    }
 
-  res.send("✅ 設定完成");
+    // 發送 Telegram 通知
+    const msg = minFare === null || minFare === undefined
+      ? `🔁 ${userId} 恢復預設金額`
+      : `✅ ${userId} 設定金額：$ ${minFare}\n上限：${maxFare ?? "未設定"}\n延設：${delay ?? 0}ms`;
+
+    const tgRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: CHAT_ID,
+        text: msg,
+        parse_mode: "Markdown",
+      }),
+    });
+
+    const tgJson = await tgRes.json();
+    if (!tgJson.ok) {
+      console.error("❌ Telegram 傳送失敗：", tgJson.description);
+    }
+
+    res.send("✅ 設定完成");
+  } catch (e) {
+    console.error("❌ [設定] 錯誤：", e.message);
+    res.status(500).send("❌ 設定處理失敗");
+  }
 });
 
 // ✅ job_panel 專用資料來源（已同步篩選邏輯）
