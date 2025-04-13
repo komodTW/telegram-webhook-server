@@ -215,7 +215,7 @@ app.post("/pp", async (req, res) => {
 
 // ✅ 設定使用者金額條件（獨立 API）
 app.post("/user-settings", async (req, res) => {
-  const { userId, minFare, maxFare, delay } = req.body;
+  const { userId, minFare } = req.body;
 
   console.log("📥 收到設定請求：", req.body);
 
@@ -229,22 +229,21 @@ app.post("/user-settings", async (req, res) => {
       delete userSettings[userId];
       console.log(`🔁 [${userId}] 恢復預設金額`);
     } else {
-      userSettings[userId] = { minFare, maxFare, delay };
-      console.log(`✅ [${userId}] 設定金額：min=${minFare}, max=${maxFare}, 延設=${delay}`);
+      userSettings[userId] = { minFare };
+      console.log(`✅ [${userId}] 金額設定為：$${minFare}`);
     }
 
-    // 發送 Telegram 通知
-    const msg = minFare === null || minFare === undefined
-      ? `🔁 ${userId} 恢復預設金額`
-      : `✅ ${userId} 設定金額：$ ${minFare}\n上限：${maxFare ?? "未設定"}\n延設：${delay ?? 0}ms`;
+    // ✅ 傳送 Telegram 通知（只含金額）
+    const message = minFare === null || minFare === undefined
+      ? `🔁 使用者 ${userId} 恢復預設金額`
+      : `✅ 使用者 ${userId} 設定金額為：$${minFare}`;
 
     const tgRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         chat_id: CHAT_ID,
-        text: msg,
-        parse_mode: "Markdown",
+        text: message
       }),
     });
 
