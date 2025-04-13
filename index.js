@@ -315,15 +315,16 @@ app.post("/pp/flush", (req, res) => {
 const LINEGO_BOT_TOKEN = process.env.LINEGO_BOT_TOKEN;
 const LINEGO_CHAT_ID = process.env.LINEGO_CHAT_ID;
 
-const notifiedLinegoJobs = [];
+const notifiedLinegoJobs = {}; // { userId: [ trip_id1, trip_id2, ... ] }
 
 app.post("/linego-log", async (req, res) => {
   try {
+    const userId = req.body.userId || "default";
     const raw = req.body.raw;
-    if (!raw) return res.status(400).send("❌ 缺少 raw 欄位");
+    if (!raw || !raw.trip_id) return res.status(400).send("❌ 缺少 raw 或 trip_id");
 
-    // 欄位預設值處理
     const {
+      trip_id,
       start_address = "未知上車地點",
       address = "未知下車地點",
       fare_range = [],
@@ -335,29 +336,27 @@ app.post("/linego-log", async (req, res) => {
 
     const fare = fare_range[0] || 0;
 
-    // ✅ 比對內容 key，用於防重複通知
-    const jobKey = JSON.stringify({
-      start_address,
-      address,
-      fare,
-      reserve_time,
-      acceptable_time,
-      notes,
-      featureName
-    });
-
-    if (notifiedLinegoJobs.includes(jobKey)) {
-      console.log("🔁 LINE GO 略過重複通知");
-      return res.send("🔁 已通知過相同資料，略過");
+    // ✅ 初始化此 user 的 trip_id 記憶陣列
+    if (!notifiedLinegoJobs[userId]) {
+      notifiedLinegoJobs[userId] = [];
     }
 
-    notifiedLinegoJobs.push(jobKey);
-    if (notifiedLinegoJobs.length > 10) notifiedLinegoJobs.shift();
+    if (notifiedLinegoJobs[userId].includes(trip_id)) {
+      console.log(`🔁 [${userId}] 重複預約單 trip_id=${trip_id}，略過通知`);
+      return res.send("🔁 已通知過相同預約單 ID");
+    }
 
+    // ✅ 記錄此 trip_id，保留最多 10 筆
+    notifiedLinegoJobs[userId].push(trip_id);
+    if (notifiedLinegoJobs[userId].length > 10) {
+      notifiedLinegoJobs[userId].shift();
+    }
+
+    // ✅ 時間格式化
     const formatTimeMMDD = (t) => {
       if (!t || typeof t !== "number") return "❓ 無效時間";
       const date = new Date(t * 1000);
-      date.setHours(date.getHours() + 8); // ✅ 台灣時區
+      date.setHours(date.getHours() + 8); // 台灣時區
       const MM = String(date.getMonth() + 1).padStart(2, "0");
       const DD = String(date.getDate()).padStart(2, "0");
       const HH = String(date.getHours()).padStart(2, "0");
@@ -368,7 +367,7 @@ app.post("/linego-log", async (req, res) => {
     const formatTimeWithMs = (t) => {
       if (!t || typeof t !== "number") return "❓ 無效時間";
       const date = new Date(t * 1000);
-      date.setHours(date.getHours() + 8); // ✅ 台灣時區
+      date.setHours(date.getHours() + 8); // 台灣時區
       const HH = String(date.getHours()).padStart(2, "0");
       const mm = String(date.getMinutes()).padStart(2, "0");
       const ss = String(date.getSeconds()).padStart(2, "0");
@@ -379,13 +378,13 @@ app.post("/linego-log", async (req, res) => {
     const reserveTimeFormatted = formatTimeMMDD(reserve_time);
     const canTakeTimeFormatted = formatTimeWithMs(acceptable_time);
 
-    // ✅ 格式化訊息
+    // ✅ 組合訊息
     const message = `
 🟢 *$ ${fare.toLocaleString()}*
 ⏳ *${reserveTimeFormatted}*
 ───────────────
-🚀 上車：${start_address}
-🛸 下車：${address}
+✅ 上車：${start_address}
+☑️ 下車：${address}
 ───────────────
 📝 備註：${notes || "無"}
 🔔 特殊需求：${featureName || "無"}
@@ -393,7 +392,7 @@ app.post("/linego-log", async (req, res) => {
 📲 *可接單時間：${canTakeTimeFormatted}*
 `;
 
-    // ✅ 傳送至 Telegram
+    // ✅ 發送通知
     await fetch(`https://api.telegram.org/bot${LINEGO_BOT_TOKEN}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -404,7 +403,7 @@ app.post("/linego-log", async (req, res) => {
       }),
     });
 
-    console.log("📨 LINE GO 資料已通知 Telegram");
+    console.log(`📨 [${userId}] LINE GO 資料已通知 Telegram：trip_id=${trip_id}`);
     res.send("✅ 成功通知 Telegram");
 
   } catch (e) {
