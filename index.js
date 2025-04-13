@@ -565,4 +565,42 @@ if (action === "accept") {
 
 // ✅ 啟動伺服器
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("🚀 Webhook Server 啟動成功，Port:", PORT));
+app.listen(PORT, async () => {
+  const bootMsg = `🚀 Webhook Server 啟動成功\n📍 Port: ${PORT}\n🕒 ${new Date().toLocaleString("zh-TW")}`;
+  console.log(bootMsg);
+
+  // ✅ 發送「伺服器啟動成功」通知到 Telegram
+  try {
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: CHAT_ID,
+        text: bootMsg,
+      }),
+    });
+  } catch (e) {
+    console.error("❌ 發送啟動通知失敗：", e.message);
+  }
+
+  // ✅ 每 30 分鐘監控一次記憶體用量
+  setInterval(async () => {
+    const memMB = process.memoryUsage().heapUsed / 1024 / 1024;
+    const memStr = `📊 [記憶體監控] 當前使用：${memMB.toFixed(2)} MB\n🕒 ${new Date().toLocaleTimeString("zh-TW")}`;
+
+    console.log(memStr);
+
+    try {
+      await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: CHAT_ID,
+          text: memStr,
+        }),
+      });
+    } catch (e) {
+      console.error("❌ 發送記憶體通知失敗：", e.message);
+    }
+  }, 30 * 60 * 1000); // ⏱ 每 30 分鐘
+});
