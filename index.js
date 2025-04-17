@@ -381,8 +381,8 @@ app.post("/linego-log", async (req, res) => {
     // ✅ 組合訊息
     const message = `
 🟢 *$ ${fare.toLocaleString()}*
-⏳ *${reserveTimeFormatted}*
 📲 *可接單時間：${canTakeTimeFormatted}*
+⏳ *${reserveTimeFormatted}*
 ───────────────
 ✅ 上車：${start_address}
 ☑️ 下車：${address}
