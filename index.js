@@ -58,6 +58,7 @@ async function sendTelegramNotification(job) {
 
   const staticMessage = `
 💰 $ *${job.fare.toLocaleString("en-US")}*
+📲 可接單時間: ${canTakeTime}
 🕓 *${bookingTime}*
 ───────────────
 🚕 ${job.on}
@@ -68,7 +69,6 @@ async function sendTelegramNotification(job) {
 ───────────────
 🆔 用戶 ID：${job.userId}
 🔖 預約單ID：${job.jobId}
-📲 可接單時間: ${canTakeTime}
 ⏳ 倒數秒數：${countdown} 秒
 ───────────────`;
 
