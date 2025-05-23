@@ -173,7 +173,7 @@ app.post("/pp", async (req, res) => {
       if (notifiedJobs.length > 30) notifiedJobs.shift(); // 可拉高儲存上限
 
       // ✅ 金額篩選
-      const minFare = userSettings[userId]?.minFare ?? 1;
+      const minFare = userSettings[userId]?.minFare ?? 600;
       if (job.fare < minFare) {
         console.log(`⛔️ 金額不符篩選條件（${job.fare} < ${minFare}），略過 jobId=${job.jobId}`);
         continue;
